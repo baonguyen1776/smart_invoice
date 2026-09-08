@@ -23,6 +23,33 @@ Solo Kanban-Scrum hybrid — no team ceremonies, tight feedback loop.
 - **Product-Unit model:** simple — `Product` has N `Unit`, each `Unit` owns its own name + price directly. No shared Unit master table, no conversion factor (no use case for it since inventory quantity is not tracked).
 - **Editing a completed invoice:** allowed — requires a confirmation dialog, then overwrites the existing record. No separate audit-trail versioning.
 - **No inventory quantity tracking, no Supplier entity** (per `docs/architecture.md`).
+- **Domain identifiers:** UUID v4 strings for Product, Unit, Invoice, and
+  InvoiceItem; invoices also receive a positive user-facing integer number.
+- **Money and quantity:** non-negative integer VND money and positive-integer
+  invoice quantity; persisted floating-point money is forbidden.
+- **Catalog identity:** duplicate Product names remain valid; optional SKU,
+  brand, and category disambiguate products. Product and Unit removal is soft
+  deactivation.
+- **Historical invoices:** InvoiceItem stores transaction-time Product/Unit
+  identity and price snapshots.
+- **AI matching context:** source-scoped aliases may use document-issuer
+  metadata without introducing a Supplier entity. Every AI result requires
+  human confirmation.
+
+## Implementation sequencing
+
+The dependency order for the next foundation/Product increments is locked:
+
+```text
+#6 Domain and persistence contracts
+        ↓
+#5 Product Domain/Application + repository abstraction
+        ↓
+#4 SQLite migration + Product repository implementation
+```
+
+Issue #4 must not invent a persistence contract, and it must implement the
+repository abstraction delivered by #5.
 
 ## AI Agent Rules (goes into `AGENTS.md`)
 
@@ -47,26 +74,28 @@ where business logic lives, how DB migrations work, and what agents must not tou
 
 **Agent split:** Gemini 3.8 Flash + OpenCode for scaffolding; Opus for a one-time review of the folder structure against the 4-layer architecture.
 
-- [ ] S0-01 Init Tauri v2 + React + TypeScript + Vite
-- [ ] S0-02 4-layer folder structure (Presentation / Application / Domain / Infrastructure)
+- [x] S0-01 Init Tauri v2 + React + TypeScript + Vite
+- [x] S0-02 4-layer folder structure (Presentation / Application / Domain / Infrastructure)
 - [ ] S0-03 SQLite via `@tauri-apps/plugin-sql` + migration system
-- [ ] S0-04 Initial migration: `Product`, `Unit`, `Invoice`, `InvoiceItem`
-- [ ] S0-05 TypeScript strict mode, ESLint, Prettier
-- [ ] S0-06 Test framework + build/typecheck script
-- [ ] S0-07 `AGENTS.md` (rules above) + git branching convention
+- [ ] S0-04 Initial four-table migration: `products`, `units`, `invoices`,
+  `invoice_items` using the approved contract in `docs/architecture.md` §19
+- [x] S0-05 TypeScript strict mode, ESLint, Prettier
+- [x] S0-06 Test framework + build/typecheck script
+- [x] S0-07 `AGENTS.md` (rules above) + git branching convention
 
 ## Sprint 1 — Product Management (UC-02) (3-4 days)
 
 **Agent split:** Gemini 3.8 Flash for CRUD/UI; Opus review on the soft-delete rule and the "≥1 Unit" validation.
 
-- [ ] PRD-001 `Product` entity + validation
-- [ ] PRD-002 `Unit` entity (owned by Product directly — no shared master table)
-- [ ] PRD-003 Product repository (SQLite)
+- [ ] PRD-001 `Product` entity + validation (including optional SKU/brand and
+  duplicate-name support)
+- [ ] PRD-002 `Unit` entity (owned by Product directly, soft-deactivated — no shared master table)
+- [ ] PRD-003 Product repository abstraction first (#5), followed by its atomic SQLite implementation (#4)
 - [ ] PRD-004 Create Product (with ≥1 Unit required)
-- [ ] PRD-005 Edit Product (name/category/units/prices)
+- [ ] PRD-005 Edit Product (name/SKU/brand/category/units/prices; at least one active Unit remains)
 - [ ] PRD-006 Soft Delete — acceptance criteria: deleted product does not appear in autocomplete, is not selectable for new invoices, but still shows correctly in invoice history
 - [ ] PRD-007 Product list UI
-- [ ] PRD-008 Duplicate product names allowed (per UC-02 E2), disambiguated by category in the UI
+- [ ] PRD-008 Duplicate product names allowed (per UC-02 E2), disambiguated by SKU/brand/category in the UI
 
 ## Sprint 2 — Invoice Core (create + persist a real draft invoice) (4-5 days)
 
@@ -78,7 +107,9 @@ where business logic lives, how DB migrations work, and what agents must not tou
 - [ ] INV-002 Add Invoice Item
 - [ ] INV-003 Remove Invoice Item
 - [ ] INV-004 Edit Item Quantity
-- [ ] INV-005 Product search: build an in-memory Fuse.js index over Product + ProductAlias (not a DB query per keystroke); refresh the index whenever a Product is created/edited/deleted
+- [ ] INV-005 Add ProductAlias through a new numbered migration, then build an
+  in-memory Fuse.js index over Product + ProductAlias (not a DB query per
+  keystroke); refresh the index whenever a Product is created/edited/deactivated
 - [ ] INV-006 Autocomplete dropdown UI, keyboard navigation (↑↓ + Enter), best match highlighted by default
 - [ ] INV-007 Unit selection (auto-fill if 1 unit, prompt if multiple)
 - [ ] INV-008 Item subtotal calculation (unit price × quantity)
@@ -110,7 +141,11 @@ where business logic lives, how DB migrations work, and what agents must not tou
 ## Sprint 5+ — AI Purchase Document Import Spike (post-MVP)
 
 - [ ] Collect 50-100 real purchase documents (mixed structured + handwritten)
-- [ ] Benchmark OCR/AI vendor candidates (Veryfi, Azure Document Intelligence) against: Vietnamese text, handwriting, line-item extraction, product name matching, image quality tolerance, latency, cost
+- [ ] Label document header/table/footer regions so issuer identity is not confused with footer printer/designer branding
+- [ ] Benchmark OCR/AI vendor candidates (Veryfi, Azure Document Intelligence) against: Vietnamese text, handwriting, source identity, line-item extraction, product name matching, image quality tolerance, latency, cost
+- [ ] Evaluate exact SKU, source-scoped alias, global alias, and Fuse.js candidate stages before adding learned reranking
+- [ ] Validate mixed documents containing matched, ambiguous, and new-candidate lines through human review
+- [ ] Persist confirmed source/alias mappings as training evidence; do not fine-tune without a labeled benchmark showing a need
 - [ ] Decide `DocumentExtractor` implementation based on benchmark results, not free-tier convenience alone
 
 ---

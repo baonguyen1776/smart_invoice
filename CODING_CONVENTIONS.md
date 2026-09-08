@@ -495,13 +495,14 @@ Examples:
 
 ### Soft Delete
 
-Products use soft delete:
+Products and their owned Units use soft deactivation:
 
 ```text
 is_active
 ```
 
-Never hard-delete Products during normal application behavior.
+Never hard-delete Products or historically referenced Units during normal
+application behavior.
 
 Do not use:
 
@@ -510,6 +511,38 @@ DELETE FROM products
 ```
 
 for Product deletion.
+
+### Persisted Value Representation
+
+Follow the field-level contract in `docs/architecture.md` §19:
+
+- Domain IDs are UUID v4 strings stored as SQLite `TEXT`.
+- Persist money as integer VND using SQLite `INTEGER`; never use `REAL` or a
+  floating-point persisted money value.
+- Validate TypeScript monetary values with `Number.isSafeInteger` and the
+  Domain range rules before persistence.
+- Invoice quantities are positive integers in the MVP.
+- Store timestamps as canonical ISO-8601 UTC `TEXT` values.
+- Encode SQLite booleans as `0`/`1` and enforce the allowed values with a
+  database constraint.
+- Enable SQLite foreign-key enforcement for every connection.
+- Invoice history renders InvoiceItem snapshot fields rather than mutable
+  Product/Unit catalog values.
+
+### Aggregate Transactions
+
+Repository implementations must keep aggregate writes atomic. In particular:
+
+- Product and all owned Unit changes are one transaction.
+- Invoice draft semantic edits write items and recalculated totals together.
+- Invoice completion writes validated items, total, status, and completion time
+  together.
+- Confirmed completed-invoice overwrite replaces items and total in one
+  transaction while preserving the documented invoice identity fields.
+
+On failure, roll back the complete operation and retain useful diagnostic
+context. Do not return raw SQLite rows or raw database errors across the
+Infrastructure boundary.
 
 ---
 

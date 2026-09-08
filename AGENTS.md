@@ -181,6 +181,10 @@ There is no `Supplier` entity.
 `Purchase` and `PurchaseItem` exist only to support AI import adding new
 Products to the catalog.
 
+Raw document-source metadata and source-scoped Product aliases may be retained
+for matching, but they must not create Supplier CRUD or supplier-management
+behavior.
+
 Do not expand Purchase into a full supplier/inventory management system.
 
 ### Product Units
@@ -192,6 +196,24 @@ There is:
 * no shared Unit master table
 * no global Unit entity
 * no unit conversion factor
+
+Every active Product must have at least one active Unit. Units use soft
+deactivation through `is_active`; never hard-delete a Unit referenced by
+historical InvoiceItems.
+
+### Persisted Value Representation
+
+The MVP persistence contracts use:
+
+* UUID v4 strings for Product, Unit, Invoice, and InvoiceItem identifiers
+* non-negative safe-integer VND amounts for money
+* positive safe-integer InvoiceItem quantities
+* ISO-8601 UTC text timestamps
+* optional Product SKU, brand, and category
+* transaction-time product and Unit snapshots on InvoiceItem
+
+Do not persist money as floating point or render historical InvoiceItems from
+mutable Product/Unit display fields.
 
 ### Completed Invoice Editing
 
@@ -207,7 +229,7 @@ The flow must:
 Do not introduce invoice versioning or audit history unless explicitly
 requested.
 
-### Product Deletion
+### Product and Unit Deactivation
 
 Products use soft delete only.
 
@@ -218,6 +240,8 @@ is_active
 ```
 
 Never hard-delete a Product.
+
+Units also use `is_active` and are soft-deactivated for normal removal.
 
 Do not use:
 

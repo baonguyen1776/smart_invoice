@@ -5,7 +5,8 @@ printing sales invoices.
 
 ## MVP scope
 
-- Manage products and their units (each unit owns its name and price).
+- Manage products with optional SKU/brand/category and directly owned units
+  (each unit owns its name and integer-VND price).
 - Search products with exact and fuzzy matching.
 - Create, auto-save, complete, edit, and print invoices.
 - Support manual price overrides, such as VIP pricing.
@@ -14,6 +15,15 @@ printing sales invoices.
 The MVP does not track inventory quantities, manage suppliers, or include
 cloud, ERP, accounting, CRM, e-commerce, payment, barcode hardware, or AI
 forecasting features.
+
+Product names may be duplicated and are disambiguated by optional SKU, brand,
+and category. Product and Unit catalog removal is soft deactivation so invoice
+history remains intact. Invoice items retain transaction-time identity and
+price snapshots rather than reading mutable catalog values.
+
+Post-MVP purchase-document AI may use raw issuer metadata to scope confirmed
+Product aliases, but this does not introduce Supplier management. AI extracts
+and suggests; a human must confirm every Product match or creation.
 
 ## Architecture
 
