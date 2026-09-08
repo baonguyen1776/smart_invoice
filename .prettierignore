@@ -1,0 +1,7 @@
+dist
+node_modules
+src-tauri
+.vitest
+coverage
+package-lock.json
+*.md
