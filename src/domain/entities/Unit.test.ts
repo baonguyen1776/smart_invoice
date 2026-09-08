@@ -48,6 +48,23 @@ describe("Unit", () => {
         }),
       ).toThrow(UnitValidationError);
     });
+
+    it("rejects null runtime values instead of treating them as omitted", () => {
+      const unit = Unit.create(validInput);
+
+      expect(() =>
+        unit.update({
+          name: null as unknown as string,
+          updatedAt: "2026-09-08T09:00:00.000Z",
+        }),
+      ).toThrow(UnitValidationError);
+      expect(() =>
+        unit.update({
+          price: null as unknown as number,
+          updatedAt: "2026-09-08T09:00:00.000Z",
+        }),
+      ).toThrow(UnitValidationError);
+    });
   });
 
   describe("update", () => {
@@ -129,6 +146,17 @@ describe("Unit", () => {
         Unit.rehydrate({
           ...validInput,
           isActive: 1 as unknown as boolean,
+          updatedAt: validInput.createdAt,
+        }),
+      ).toThrow(UnitValidationError);
+    });
+
+    it("maps a non-string runtime name to UnitValidationError", () => {
+      expect(() =>
+        Unit.rehydrate({
+          ...validInput,
+          name: null as unknown as string,
+          isActive: true,
           updatedAt: validInput.createdAt,
         }),
       ).toThrow(UnitValidationError);

@@ -124,20 +124,25 @@ describe("Product", () => {
   });
 
   describe("update", () => {
-    it("replaces the desired aggregate state and preserves identity", () => {
+    it("accepts a reconciled aggregate state and preserves identity", () => {
       const product = Product.create(validProductInput);
+      const deactivatedUnit = product.units[0]?.deactivate(UPDATED_AT);
       const newUnit = createUnit({
         id: SECOND_UNIT_ID,
         name: "Thùng",
         price: 240_000,
       });
 
+      if (deactivatedUnit === undefined) {
+        throw new Error("Expected the fixture to contain a Unit.");
+      }
+
       const updatedProduct = product.update({
         sku: " COCA-NEW ",
         name: " Coca Cola mới ",
         brand: null,
         category: " Đồ uống ",
-        units: [newUnit],
+        units: [deactivatedUnit, newUnit],
         updatedAt: UPDATED_AT,
       });
 
@@ -147,7 +152,7 @@ describe("Product", () => {
       expect(updatedProduct.name).toBe("Coca Cola mới");
       expect(updatedProduct.brand).toBeNull();
       expect(updatedProduct.category).toBe("Đồ uống");
-      expect(updatedProduct.units).toEqual([newUnit]);
+      expect(updatedProduct.units).toEqual([deactivatedUnit, newUnit]);
       expect(updatedProduct.updatedAt).toBe(UPDATED_AT);
       expect(product.name).toBe("Coca Cola");
       expect(product.units).toEqual(validProductInput.units);

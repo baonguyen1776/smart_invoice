@@ -1,6 +1,6 @@
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-interface UnitState {
+export interface UnitState {
   id: string;
   productId: string;
   name: string;
@@ -10,7 +10,7 @@ interface UnitState {
   updatedAt: string;
 }
 
-interface CreateUnitInput {
+export interface CreateUnitInput {
   id: string;
   productId: string;
   name: string;
@@ -18,7 +18,7 @@ interface CreateUnitInput {
   createdAt: string;
 }
 
-interface UpdateUnitInput {
+export interface UpdateUnitInput {
   name?: string;
   price?: number;
   updatedAt: string;
@@ -60,6 +60,10 @@ export class Unit {
       throw new UnitValidationError("isActive must be a boolean.");
     }
 
+    if (typeof state.name !== "string") {
+      throw new UnitValidationError("Unit name must be a string.");
+    }
+
     const normalizedName = state.name.trim();
 
     if (normalizedName.length === 0) {
@@ -99,8 +103,8 @@ export class Unit {
   update(input: UpdateUnitInput): Unit {
     return Unit.fromState({
       ...this.toState(),
-      name: input.name ?? this.name,
-      price: input.price ?? this.price,
+      name: input.name === undefined ? this.name : input.name,
+      price: input.price === undefined ? this.price : input.price,
       updatedAt: input.updatedAt,
     });
   }
@@ -119,7 +123,7 @@ export class Unit {
 }
 
 function validateUuid(value: string, field: string): void {
-  if (!UUID_V4_PATTERN.test(value)) {
+  if (typeof value !== "string" || !UUID_V4_PATTERN.test(value)) {
     throw new UnitValidationError(`${field} must be a valid UUID v4.`);
   }
 }
