@@ -14,7 +14,9 @@ Shop owners / small businesses. The app runs on **desktop only** (Windows / macO
 
 - User types into the "Product name" field (e.g. "Sữa").
 - The system performs a **fuzzy search** against the product database by matches don't need to be a continuous substring (similar to how typing "git" in a terminal suggests `git-shell`, `fcgistarter`, `segedit`, etc. based on scattered matching characters).
-- Results appear in a dropdown list. Each row shows the **product name** (matched characters highlighted/bolded) plus a secondary column with **category or reference price** on the right, to help the user disambiguate quickly between similar items.
+- Results appear in a dropdown list. Each row shows the **product name**
+  (matched characters highlighted/bolded) plus available SKU, brand, category,
+  and reference price context to disambiguate similar or duplicate names.
 - Navigation: **Up/Down arrow keys** to move through the list, **Enter** to confirm. The most relevant match is **highlighted by default** so the user can just press Enter immediately.
 
 ### Unit selection and price auto-fill
@@ -30,7 +32,8 @@ Shop owners / small businesses. The app runs on **desktop only** (Windows / macO
 
 ### Product management
 
-- Full CRUD for products, units, and prices.
+- Create, view, and update products, units, and prices. Normal removal uses soft
+  deactivation so historical invoice references remain valid.
 
 ### Printing
 
@@ -41,6 +44,9 @@ Shop owners / small businesses. The app runs on **desktop only** (Windows / macO
 - Input: a PDF file or a scanned image of a **structured** purchase invoice (clear layout/columns — not free-form handwriting).
 - Output: extracted line items become a purchase draft and suggestions for new products, **pending human review, confirmation, and manual entry of the selling price** by the user.
 - The feature does not track inventory quantities or create products without confirmation.
+- Document issuer metadata scopes learned Product aliases but does not create a
+  Supplier entity. Each line is reviewed independently as an existing match,
+  an ambiguous match, or a new-product candidate.
 - Complexity: medium — relies on OCR plus table/layout detection.
 
 ## Phase 3 (post-MVP): AI-assisted extraction from handwritten purchase invoices

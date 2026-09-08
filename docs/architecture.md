@@ -76,6 +76,7 @@ Contains business rules and domain entities.
 
 ```text
 Product
+Unit
 ProductAlias
 Invoice
 InvoiceItem
@@ -153,8 +154,11 @@ Chosen for the MVP because of the single-PC, local-first, offline operation,
 small/medium dataset, and no need for a database server.
 
 ```text
-Product, Invoice, InvoiceItem, Purchase, PurchaseItem
+Product, Unit, Invoice, InvoiceItem
 ```
+
+`Purchase` and `PurchaseItem` remain post-MVP concepts for AI-assisted product
+discovery. They are not part of the initial four-table migration.
 
 ---
 
@@ -181,9 +185,9 @@ Barcode is not used in the MVP.
 ```text
 User Input
     │
-    ├── Exact search: SKU / ID
+    ├── Exact search: optional SKU / ID
     │
-    └── Fuzzy search → Fuse.js
+    └── Name / brand / category / alias search → Fuse.js
 ```
 
 Expected scale: hundreds → several thousand products (up to ~10K). If the catalog
@@ -205,6 +209,14 @@ Aliases: Coca 330, CC330, Coca can
 User Search / AI Extraction → Alias/Name Matching → Product
 ```
 
+An official or internal product code belongs in `Product.sku`. A code or name
+used only by one purchase-document issuer belongs in a source-scoped
+`ProductAlias`; it must not become a global SKU.
+
+The ProductAlias contract is defined in §19. Its persistence is deferred from
+the initial migration to a later numbered migration before `INV-005` product
+search or AI import is implemented.
+
 ---
 
 ## 9. AI / Document Processing
@@ -214,11 +226,11 @@ AI is an infrastructure capability, not a domain core.
 ```text
 Purchase Document
        ↓
-Document Extraction
+Document Extraction (header / table / footer)
        ↓
 Normalization
        ↓
-Product Matching
+Product Matching (each line independently)
     ↓
 Purchase Draft (only for adding new Products; does not increase quantities)
        ↓
@@ -229,6 +241,12 @@ Confirm
 
 AI is only allowed to Extract, Normalize, Suggest, and Match. AI does not directly:
 Commit Invoice, Commit Purchase, or Create Product without confirmation.
+
+The document issuer is matching context, not Product identity. The extractor
+must distinguish issuer data in the header from printer/designer branding in
+the footer. A source fingerprint is derived from tax code, then phone number,
+then normalized issuer name. This source metadata does not create a `Supplier`
+entity or supplier-management capability.
 
 ---
 
@@ -243,13 +261,28 @@ DocumentExtractor
 
 ProductMatcher
         │
-        ├── Name matching
-        ├── Alias matching
-        ├── Fuzzy matching
+        ├── Exact SKU matching
+        ├── Source-scoped and global alias matching
+        ├── Name + brand + specification + unit matching
+        ├── Fuse.js candidate generation
         └── AI-assisted matching
 ```
 
 Do not lock business logic to a specific AI vendor.
+
+Each extracted line produces one review state:
+
+```text
+matched       -> preselect an existing Product; human confirmation required
+ambiguous     -> show candidate Products; human selection required
+new_candidate -> propose a Product; human creation and selling price required
+```
+
+Low confidence alone does not prove a Product is new because OCR may be wrong.
+Confirmed mappings are stored as aliases and reused on later imports. Different
+document sources may map different aliases to the same Product. Match precision
+is favored over automatic coverage because a false existing-product match is
+more harmful than an extra review step.
 
 ---
 
@@ -314,7 +347,7 @@ flowchart TD
         A6[ConfirmPurchase]
     end
     subgraph Domain
-        D1[Product / ProductAlias]
+        D1[Product / Unit / ProductAlias]
         D2[Invoice / InvoiceItem]
         D3[Purchase / PurchaseItem]
     end
@@ -386,10 +419,271 @@ Forecasting, Barcode Hardware, **Inventory/Stock Quantity Tracking**.
 **Confirmed:** PC-first, Tauri v2, React + TypeScript, Vite, SQLite,
 Full 4-layer Architecture, SOLID-oriented design, Fuse.js, No barcode
 dependency, Human-in-the-loop AI, Local-first MVP, No inventory
-quantity tracking.
+quantity tracking, UUID domain identifiers, integer VND money, positive-integer
+invoice quantities, transaction-time InvoiceItem snapshots, optional Product
+SKU/brand, and source-scoped ProductAlias matching.
 
 **Pending Technical Spike:** Printer hardware/output format, AI/OCR provider,
-exact database access strategy, exact AI matching strategy.
+AI confidence thresholds, and learned-reranker/fine-tuning viability after a
+labeled benchmark dataset exists.
 
 **Future Evolution:** SQLite → PostgreSQL; Local App → Backend API →
 Multi-PC/Multi-branch.
+
+---
+
+## 19. MVP Domain and Persistence Contract
+
+This section is the field-level source of truth for the initial schema and the
+Domain/Application contracts. SQLite table and column names use `snake_case`;
+Domain and Application code use the TypeScript naming rules in
+`CODING_CONVENTIONS.md`.
+
+### 19.1 Shared Representations
+
+#### Identifiers
+
+- `Product`, `Unit`, `Invoice`, and `InvoiceItem` use UUID v4 strings.
+- SQLite stores UUIDs as `TEXT PRIMARY KEY NOT NULL`.
+- Application code generates IDs with the native `crypto.randomUUID()` API;
+  Domain entities do not import browser, Tauri, or SQLite APIs.
+- IDs are immutable and never reused.
+
+#### Money
+
+- The MVP currency is VND and is not repeated on each row.
+- All monetary values are non-negative integer VND amounts.
+- The valid persisted range is `0..9,007,199,254,740,991`
+  (`Number.MAX_SAFE_INTEGER`). Each price, subtotal, and total must remain in
+  that range.
+- SQLite uses `INTEGER`; TypeScript uses `number` guarded by
+  `Number.isSafeInteger` and the documented range validations.
+- `REAL`, floating-point persisted money, and implicit currency conversion are
+  forbidden.
+- Because quantity is an integer, `subtotal = unit_price * quantity` is exact
+  and requires no fractional rounding.
+
+#### Quantity
+
+- `InvoiceItem.quantity` is a positive integer in the range
+  `1..9,007,199,254,740,991` (`Number.MAX_SAFE_INTEGER`).
+- Fractional quantities are deferred until a real use case defines precision
+  and rounding behavior.
+- Invoice quantity represents an amount sold only. It does not represent stock
+  on hand and never triggers inventory deduction.
+
+#### Timestamps
+
+- SQLite stores timestamps as ISO-8601 UTC `TEXT` values.
+- `created_at` is immutable; `updated_at` changes on every persisted mutation.
+- Application/Infrastructure boundaries exchange timestamps in their canonical
+  ISO-8601 UTC representation.
+
+### 19.2 Initial Schema Scope
+
+The `0001_*` migration contains exactly these four tables:
+
+```text
+products
+units
+invoices
+invoice_items
+```
+
+`product_aliases`, `purchases`, and `purchase_items` are not part of the initial
+migration. Any later persistence addition uses a new numbered migration.
+
+### 19.3 Products
+
+| Column | SQLite contract | Domain rule |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY NOT NULL` | UUID v4; immutable |
+| `sku` | nullable `TEXT` | trimmed; non-empty when present; unique case-insensitively |
+| `name` | `TEXT NOT NULL` | trimmed and non-empty; duplicates allowed |
+| `brand` | nullable `TEXT` | trimmed and non-empty when present |
+| `category` | nullable `TEXT` | trimmed and non-empty when present |
+| `is_active` | `INTEGER NOT NULL DEFAULT 1` | boolean encoded as `0`/`1` |
+| `created_at` | `TEXT NOT NULL` | immutable UTC timestamp |
+| `updated_at` | `TEXT NOT NULL` | UTC timestamp updated on mutation |
+
+Application code supplies `id`, `name`, and timestamps. Optional `sku`,
+`brand`, and `category` default to `NULL`; `is_active` defaults to `1`.
+
+Required constraints and indexes:
+
+- `CHECK (length(trim(name)) > 0)` and equivalent nullable-field checks that
+  reject blank `sku`, `brand`, or `category` values when present.
+- `CHECK (is_active IN (0, 1))`.
+- A partial unique, case-insensitive index on non-null `sku`.
+- Non-unique indexes supporting `is_active`, `name`, `brand`, and `category`
+  lookups.
+- There is no unique constraint on `name`; duplicate Product names are an
+  explicit requirement.
+- Normal Product removal updates `is_active` to `0`; it never executes a hard
+  delete.
+
+### 19.4 Units
+
+| Column | SQLite contract | Domain rule |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY NOT NULL` | UUID v4; immutable |
+| `product_id` | `TEXT NOT NULL` | references its owning Product |
+| `name` | `TEXT NOT NULL` | trimmed and non-empty |
+| `price` | `INTEGER NOT NULL` | non-negative integer VND |
+| `is_active` | `INTEGER NOT NULL DEFAULT 1` | boolean encoded as `0`/`1` |
+| `created_at` | `TEXT NOT NULL` | immutable UTC timestamp |
+| `updated_at` | `TEXT NOT NULL` | UTC timestamp updated on mutation |
+
+Application code supplies `id`, `product_id`, `name`, `price`, and timestamps;
+`is_active` defaults to `1`.
+
+Required constraints and indexes:
+
+- `FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT`.
+- `CHECK (length(trim(name)) > 0)`.
+- `CHECK (price BETWEEN 0 AND 9007199254740991)` and
+  `CHECK (is_active IN (0, 1))`.
+- Unit names are unique case-insensitively within a Product.
+- An index on `(product_id, is_active)` supports loading owned active Units.
+- Every Product must have at least one active Unit. Domain/Application logic
+  enforces this cross-row invariant, and repository writes persist the Product
+  plus all owned Unit changes in one transaction.
+- Removing a Unit is soft deactivation through `is_active`; historical Unit
+  references are never hard-deleted.
+
+### 19.5 Invoices
+
+| Column | SQLite contract | Domain rule |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY NOT NULL` | UUID v4; immutable |
+| `invoice_number` | `INTEGER NOT NULL UNIQUE` | positive, user-facing identity |
+| `status` | `TEXT NOT NULL DEFAULT 'draft'` | `draft` or `completed` only |
+| `total` | `INTEGER NOT NULL DEFAULT 0` | non-negative integer VND |
+| `created_at` | `TEXT NOT NULL` | immutable UTC timestamp |
+| `updated_at` | `TEXT NOT NULL` | UTC timestamp updated on mutation |
+| `completed_at` | nullable `TEXT` | null for draft; set on first completion |
+
+Application code supplies `id`, `invoice_number`, and timestamps. `status`
+defaults to `draft`, `total` defaults to `0`, and `completed_at` defaults to
+`NULL`.
+
+Required constraints and indexes:
+
+- `CHECK (invoice_number BETWEEN 1 AND 9007199254740991)`.
+- `CHECK (status IN ('draft', 'completed'))`.
+- `CHECK (total BETWEEN 0 AND 9007199254740991)`.
+- A status/timestamp consistency check requires `completed_at IS NULL` while
+  status is `draft` and `completed_at IS NOT NULL` while status is `completed`.
+- Indexes support status and `created_at` history queries.
+- The next invoice number is selected and inserted in the same SQLite write
+  transaction. Gaps are allowed.
+
+State rules:
+
+- A new Invoice starts as `draft` and may initially contain no items so it can
+  be auto-saved immediately.
+- Draft items, quantities, transaction prices, and totals may change.
+- `draft -> completed` requires at least one valid item.
+- A completed Invoice does not transition back to `draft`.
+- Editing a completed Invoice requires explicit Presentation confirmation. The
+  confirmed write replaces its items and total atomically while preserving
+  `id`, `invoice_number`, `created_at`, and the original `completed_at`;
+  `status` remains `completed` and `updated_at` changes.
+- There is no audit/version table.
+
+### 19.6 Invoice Items
+
+| Column | SQLite contract | Domain rule |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY NOT NULL` | UUID v4; immutable |
+| `invoice_id` | `TEXT NOT NULL` | owning Invoice reference |
+| `product_id` | `TEXT NOT NULL` | catalog reference retained for traceability |
+| `unit_id` | `TEXT NOT NULL` | catalog reference retained for traceability |
+| `product_name` | `TEXT NOT NULL` | transaction-time snapshot |
+| `product_sku` | nullable `TEXT` | transaction-time snapshot |
+| `product_brand` | nullable `TEXT` | transaction-time snapshot |
+| `unit_name` | `TEXT NOT NULL` | transaction-time snapshot |
+| `unit_price` | `INTEGER NOT NULL` | actual transaction price, including VIP override |
+| `quantity` | `INTEGER NOT NULL` | positive integer |
+| `subtotal` | `INTEGER NOT NULL` | `unit_price * quantity` |
+| `created_at` | `TEXT NOT NULL` | immutable UTC timestamp |
+
+Application code supplies every InvoiceItem field after Domain validation;
+InvoiceItem columns have no database defaults, including nullable snapshot
+fields, which are supplied explicitly as `NULL` when absent.
+
+Required constraints and indexes:
+
+- `FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE`.
+- Product and Unit foreign keys use `ON DELETE RESTRICT`.
+- Snapshot names are trimmed and non-empty. Nullable SKU/brand snapshots are
+  trimmed and non-empty when present.
+- `CHECK (unit_price BETWEEN 0 AND 9007199254740991)`,
+  `CHECK (quantity BETWEEN 1 AND 9007199254740991)`,
+  `CHECK (subtotal BETWEEN 0 AND 9007199254740991)`, and
+  `CHECK (subtotal = unit_price * quantity)`.
+- Indexes support lookup by `invoice_id`, `product_id`, and `unit_id`.
+- Invoice history renders snapshot fields and never reads mutable catalog
+  names, brands, SKUs, Unit names, or prices for historical display.
+
+### 19.7 Transaction Boundaries
+
+Each operation below is all-or-nothing:
+
+1. Create or update a Product together with all owned Unit changes.
+2. Soft-deactivate a Product and enforce its catalog visibility behavior.
+3. Create an Invoice draft and assign its invoice number.
+4. Apply one semantic draft edit and persist items plus the recalculated total.
+5. Complete an Invoice by validating items and writing status, total, and
+   `completed_at`.
+6. Confirmed overwrite of a completed Invoice, including replacement items and
+   recalculated total.
+
+Database errors must retain operation context and roll back the entire
+transaction. Infrastructure errors are mapped to Application-facing errors;
+raw SQLite rows and SQL errors never leak into Domain or Presentation.
+
+SQLite foreign-key enforcement must be enabled for every connection.
+
+### 19.8 ProductAlias Contract and Persistence Timing
+
+`ProductAlias` belongs to a Product and supports both user search and future AI
+matching. Its contract is:
+
+| Field | Future SQLite contract | Domain rule |
+|---|---|---|
+| `id` | `TEXT PRIMARY KEY NOT NULL` | UUID v4; immutable |
+| `product_id` | `TEXT NOT NULL` | required Product reference |
+| `alias` | `TEXT NOT NULL` | trimmed, non-empty raw alias or source item code |
+| `normalized_alias` | `TEXT NOT NULL` | non-empty normalized matching value |
+| `source_key` | nullable `TEXT` | document-source fingerprint when scoped |
+| `source_name_raw` | nullable `TEXT` | issuer text retained for review/debugging |
+| `unit_name` | nullable `TEXT` | source Unit context |
+| `created_at` | `TEXT NOT NULL` | immutable ISO-8601 UTC timestamp |
+
+Application code supplies required values. Nullable source fields default to
+`NULL`. The future foreign key from `product_id` to `products.id` restricts
+physical Product deletion. Exact alias uniqueness and lookup indexes are
+intentionally decided in the later ProductAlias migration, based on the
+normalization implementation delivered with `INV-005`.
+
+The initial migration intentionally defers this table. Before `INV-005`, a new
+numbered migration must define its exact SQLite constraints and indexes without
+editing the initial migration.
+
+For post-MVP AI import:
+
+- Document extraction separates header, line-item table, and footer.
+- `source_key` uses tax code first, then phone number, then normalized issuer
+  name. It is matching metadata, not a `Supplier` entity.
+- Each extracted line is matched independently using exact SKU, source-scoped
+  alias, global alias, normalized name/brand/specification/Unit, and finally
+  Fuse.js candidates.
+- Brand, size, or specification conflicts reject or strongly penalize a match.
+- Lines resolve to `matched`, `ambiguous`, or `new_candidate`.
+- Existing matches reference existing Products. Only user-confirmed
+  `new_candidate` lines may invoke `CreateProduct`, after at least one Unit and
+  a selling price are supplied.
+- Purchase-document prices never automatically become catalog selling prices.
+- Confirmed mappings add or reinforce aliases. Model fine-tuning remains
+  deferred until a labeled benchmark dataset demonstrates a need.
