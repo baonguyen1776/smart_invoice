@@ -176,6 +176,42 @@ SQLite
 
 React Components must not call Raw SQL directly.
 
+### Product repository transaction bridge
+
+`@tauri-apps/plugin-sql` remains the approved Tauri SQLite integration. The
+plugin does not currently expose a JavaScript transaction handle that can
+guarantee several awaited statements use the same pooled connection. Therefore,
+the project owner approved a narrow `sqlx` dependency on 2026-09-09 for the
+SQLite Product repository.
+
+Product repository operations call typed Tauri commands. Rust owns one bounded
+SQLite pool, applies numbered migrations at startup, and performs Product plus
+owned Unit writes in one `sqlx` transaction. This avoids split transaction
+boundaries while preserving the Application `ProductRepository` interface;
+Domain and Application do not import Tauri, SQL, database rows, or Rust types.
+The same pool serves reads and writes so connection configuration and locking
+behavior remain consistent.
+
+The current Product bridge uses `sqlx` for migration, reads, and writes. The SQL
+plugin is installed/registered but is not the Product data path; no generic SQL
+capabilities are granted to the webview. This avoids opening a second pool with
+different connection settings. Any future use of plugin reads must address that
+configuration explicitly before enabling permissions.
+
+Every managed SQLite connection registers `UNICODE_LOWER`, comparing Unicode
+lowercase strings (including Vietnamese) consistently with catalog validation.
+Migration `0002_integrity_guards.sql` rebuilds SKU and Unit-name unique indexes
+using this collation and adds integer-storage guards for money and quantities.
+External database writers must register the same collation. The migration fails
+without changing existing data if fractional values or conflicting names exist;
+it does not round values or merge records automatically.
+
+Unit renames use collision-free temporary names inside the write transaction to
+support swaps without deleting historical identities. Commands reject foreign
+ownership, incomplete Unit aggregates, missing Product updates, and Unit
+reactivation. Readers expose orphaned Product rows for Domain validation rather
+than silently treating corrupt data as absent.
+
 ---
 
 ## 7. Product Search
