@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { ProductCatalogError } from "../../application/errors/ProductCatalogError";
 import type { Result } from "../../application/shared/Result";
 import type { CreateProduct, CreateProductInput } from "../../application/use-cases/CreateProduct";
@@ -51,6 +51,34 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
   const [draft, setDraft] = useState<ProductDraft>(EMPTY_DRAFT);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+
+  const brands = useMemo(() => uniqueValues(products.map((product) => product.brand)), [products]);
+  const categories = useMemo(
+    () => uniqueValues(products.map((product) => product.category)),
+    [products],
+  );
+  const visibleProducts = useMemo(() => {
+    const normalizedQuery = normalizeSearch(query);
+    return products.filter((product) => {
+      const matchesQuery =
+        normalizedQuery === "" ||
+        [product.name, product.sku, product.brand, product.category]
+          .filter((value): value is string => value !== null)
+          .some((value) => normalizeSearch(value).includes(normalizedQuery));
+      return (
+        matchesQuery &&
+        (brandFilter === "" || product.brand === brandFilter) &&
+        (categoryFilter === "" || product.category === categoryFilter)
+      );
+    });
+  }, [brandFilter, categoryFilter, products, query]);
+  const activeUnitCount = products.reduce(
+    (total, product) => total + product.units.filter((unit) => unit.isActive).length,
+    0,
+  );
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
@@ -197,197 +225,367 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
   }
 
   return (
-    <main className="catalog-shell">
-      <header className="catalog-header">
-        <div>
-          <p className="eyebrow">Smart Invoice</p>
-          <h1>Quản lý sản phẩm</h1>
-          <p className="subtitle">Danh mục sản phẩm và đơn giá bán hiện hành</p>
+    <div className="app-frame">
+      <aside className="sidebar" aria-label="Điều hướng chính">
+        <div className="brand-mark">
+          <span>SI</span>
+          <strong>Smart Invoice</strong>
         </div>
-        <button className="primary-button" type="button" onClick={openCreateForm}>
-          + Thêm sản phẩm
-        </button>
-      </header>
-      {message && (
-        <p className="notice success" role="status">
-          {message}
-        </p>
-      )}
-      {error && (
-        <p className="notice error" role="alert">
-          {error}
-        </p>
-      )}
-      <section className="catalog-card" aria-labelledby="catalog-title">
-        <div className="section-heading">
+        <nav>
+          <p>QUẢN LÝ</p>
+          <a className="active" href="#catalog-title" aria-current="page">
+            <span aria-hidden="true">▦</span>Sản phẩm
+          </a>
+        </nav>
+        <div className="offline-note">
+          <span aria-hidden="true">●</span>
           <div>
-            <h2 id="catalog-title">Sản phẩm đang hoạt động</h2>
-            <p>{products.length} sản phẩm</p>
+            <strong>Dữ liệu cục bộ</strong>
+            <small>Sẵn sàng ngoại tuyến</small>
           </div>
-          <button className="text-button" type="button" onClick={() => void loadProducts()}>
-            Làm mới
-          </button>
         </div>
-        {isLoading ? (
-          <p className="empty-state" role="status">
-            Đang tải danh mục…
+      </aside>
+
+      <main className="workspace">
+        <header className="page-header">
+          <div>
+            <p className="breadcrumb">Danh mục / Sản phẩm</p>
+            <h1>Quản lý sản phẩm</h1>
+            <p className="subtitle">Tra cứu và cập nhật bảng giá bán tại một nơi.</p>
+          </div>
+          <button className="primary-button" type="button" onClick={openCreateForm}>
+            <span aria-hidden="true">＋</span> Thêm sản phẩm
+          </button>
+        </header>
+
+        {message && (
+          <p className="notice success" role="status">
+            {message}
           </p>
-        ) : products.length === 0 ? (
-          <div className="empty-state">
-            <strong>Chưa có sản phẩm</strong>
-            <span>Thêm sản phẩm đầu tiên để bắt đầu tạo hóa đơn.</span>
-          </div>
-        ) : (
-          <div className="product-grid">
-            {products.map((product) => (
-              <article className="product-card" key={product.id}>
-                <div className="product-card-heading">
-                  <div>
-                    <h3>{product.name}</h3>
-                    <p>{product.sku ? `SKU ${product.sku}` : "Chưa có SKU"}</p>
-                  </div>
-                  <span className="status-badge">Đang bán</span>
-                </div>
-                <p className="product-meta">
-                  {[product.brand, product.category].filter(Boolean).join(" · ") ||
-                    "Chưa có thương hiệu / nhóm"}
-                </p>
-                <ul className="unit-list" aria-label={`Đơn vị của ${product.name}`}>
-                  {product.units
-                    .filter((unit) => unit.isActive)
-                    .map((unit) => (
-                      <li key={unit.id}>
-                        <span>{unit.name}</span>
-                        <strong>{formatVnd(unit.price)}</strong>
-                      </li>
-                    ))}
-                </ul>
-                <div className="card-actions">
-                  <button type="button" onClick={() => openEditForm(product)}>
-                    Chỉnh sửa
-                  </button>
-                  <button
-                    className="danger-button"
-                    type="button"
-                    onClick={() => void handleDeactivate(product)}
-                  >
-                    Ngừng sử dụng
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
         )}
-      </section>
-      {isFormOpen && (
-        <div className="modal-backdrop" role="presentation">
-          <section
-            className="product-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="product-form-title"
-          >
-            <div className="dialog-heading">
-              <div>
-                <p className="eyebrow">{editingProduct ? "Chỉnh sửa" : "Sản phẩm mới"}</p>
-                <h2 id="product-form-title">
-                  {editingProduct ? editingProduct.name : "Thêm sản phẩm"}
-                </h2>
-              </div>
-              <button className="icon-button" type="button" aria-label="Đóng" onClick={closeForm}>
-                ×
+        {error && (
+          <p className="notice error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <section className="summary-strip" aria-label="Tổng quan danh mục">
+          <div>
+            <span className="summary-icon box" aria-hidden="true">
+              □
+            </span>
+            <p>
+              <small>SẢN PHẨM ĐANG BÁN</small>
+              <strong>{products.length}</strong>
+            </p>
+          </div>
+          <div>
+            <span className="summary-icon unit" aria-hidden="true">
+              ↔
+            </span>
+            <p>
+              <small>ĐƠN VỊ TÍNH</small>
+              <strong>{activeUnitCount}</strong>
+            </p>
+          </div>
+          <div>
+            <span className="summary-icon category" aria-hidden="true">
+              ◇
+            </span>
+            <p>
+              <small>NHÓM SẢN PHẨM</small>
+              <strong>{categories.length}</strong>
+            </p>
+          </div>
+        </section>
+
+        <section className="catalog-panel" aria-labelledby="catalog-title">
+          <div className="panel-heading">
+            <div>
+              <h2 id="catalog-title">Danh sách sản phẩm</h2>
+              <p>
+                {visibleProducts.length} trong {products.length} sản phẩm
+              </p>
+            </div>
+            <button
+              className="refresh-button"
+              type="button"
+              onClick={() => void loadProducts()}
+              aria-label="Làm mới danh sách"
+            >
+              ↻ <span>Làm mới</span>
+            </button>
+          </div>
+          <div className="catalog-toolbar">
+            <label className="search-box">
+              <span className="sr-only">Tìm sản phẩm</span>
+              <span aria-hidden="true">⌕</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Tìm theo tên, mã, thương hiệu…"
+              />
+            </label>
+            <label>
+              <span className="sr-only">Lọc theo thương hiệu</span>
+              <select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}>
+                <option value="">Tất cả thương hiệu</option>
+                {brands.map((brand) => (
+                  <option key={brand}>{brand}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className="sr-only">Lọc theo nhóm sản phẩm</span>
+              <select
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+              >
+                <option value="">Tất cả nhóm</option>
+                {categories.map((category) => (
+                  <option key={category}>{category}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {isLoading ? (
+            <p className="empty-state" role="status">
+              Đang tải danh mục…
+            </p>
+          ) : products.length === 0 ? (
+            <div className="empty-state">
+              <strong>Chưa có sản phẩm</strong>
+              <span>Thêm sản phẩm đầu tiên để bắt đầu tạo hóa đơn.</span>
+              <button className="primary-button" type="button" onClick={openCreateForm}>
+                Thêm sản phẩm
               </button>
             </div>
-            <form onSubmit={(event) => void handleSubmit(event)}>
-              <div className="form-grid">
-                <label className="full-field">
-                  Tên sản phẩm <span aria-hidden="true">*</span>
-                  <input
-                    required
-                    value={draft.name}
-                    onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                  />
-                </label>
-                <label>
-                  SKU
-                  <input
-                    value={draft.sku}
-                    onChange={(event) => setDraft({ ...draft, sku: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Thương hiệu
-                  <input
-                    value={draft.brand}
-                    onChange={(event) => setDraft({ ...draft, brand: event.target.value })}
-                  />
-                </label>
-                <label className="full-field">
-                  Nhóm sản phẩm
-                  <input
-                    value={draft.category}
-                    onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-                  />
-                </label>
-              </div>
-              <fieldset className="units-fieldset">
-                <div className="units-heading">
-                  <div>
-                    <legend>
-                      Đơn vị bán <span aria-hidden="true">*</span>
-                    </legend>
-                    <p>Giá là số nguyên, đơn vị VND.</p>
-                  </div>
-                  <button className="secondary-button" type="button" onClick={addUnit}>
-                    + Thêm đơn vị
-                  </button>
+          ) : visibleProducts.length === 0 ? (
+            <div className="empty-state">
+              <strong>Không tìm thấy sản phẩm</strong>
+              <span>Thử từ khóa khác hoặc bỏ bộ lọc.</span>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setBrandFilter("");
+                  setCategoryFilter("");
+                }}
+              >
+                Xóa bộ lọc
+              </button>
+            </div>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sản phẩm</th>
+                    <th>Mã sản phẩm</th>
+                    <th>Phân loại</th>
+                    <th>Đơn vị &amp; giá bán</th>
+                    <th>Trạng thái</th>
+                    <th>
+                      <span className="sr-only">Thao tác</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleProducts.map((product) => (
+                    <tr key={product.id}>
+                      <td>
+                        <div className="product-cell">
+                          <span className="product-avatar" aria-hidden="true">
+                            {initials(product.name)}
+                          </span>
+                          <div>
+                            <strong>{product.name}</strong>
+                            <small>{product.brand ?? "Chưa có thương hiệu"}</small>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={product.sku ? "product-code" : "muted"}>
+                          {product.sku ?? "Chưa đặt mã"}
+                        </span>
+                      </td>
+                      <td>
+                        {product.category ? (
+                          <span className="category-chip">{product.category}</span>
+                        ) : (
+                          <span className="muted">Chưa phân nhóm</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="price-list">
+                          {product.units
+                            .filter((unit) => unit.isActive)
+                            .map((unit) => (
+                              <span key={unit.id}>
+                                <small>{unit.name}</small>
+                                <strong>{formatVnd(unit.price)}</strong>
+                              </span>
+                            ))}
+                        </div>
+                      </td>
+                      <td>
+                        <span className="status-badge">
+                          <i aria-hidden="true" />
+                          Đang bán
+                        </span>
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <button type="button" onClick={() => openEditForm(product)}>
+                            Chỉnh sửa
+                          </button>
+                          <button
+                            className="danger-link"
+                            type="button"
+                            onClick={() => void handleDeactivate(product)}
+                          >
+                            Ngừng bán
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+        {isFormOpen && (
+          <div className="modal-backdrop" role="presentation">
+            <section
+              className="product-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="product-form-title"
+            >
+              <div className="dialog-heading">
+                <div>
+                  <p className="eyebrow">{editingProduct ? "Chỉnh sửa" : "Sản phẩm mới"}</p>
+                  <h2 id="product-form-title">
+                    {editingProduct ? editingProduct.name : "Thêm sản phẩm"}
+                  </h2>
                 </div>
-                {draft.units.map((unit, index) => (
-                  <div className="unit-row" key={unit.key}>
-                    <label>
-                      Tên đơn vị
-                      <input
-                        required
-                        value={unit.name}
-                        onChange={(event) => updateUnit(unit.key, "name", event.target.value)}
-                        placeholder="Ví dụ: Chai"
-                      />
-                    </label>
-                    <label>
-                      Giá bán
-                      <input
-                        required
-                        inputMode="numeric"
-                        value={unit.price}
-                        onChange={(event) => updateUnit(unit.key, "price", event.target.value)}
-                        placeholder="0"
-                        aria-label={`Giá bán đơn vị ${index + 1}`}
-                      />
-                    </label>
-                    <button
-                      className="remove-unit"
-                      type="button"
-                      onClick={() => removeUnit(unit.key)}
-                      aria-label={`Xóa đơn vị ${index + 1}`}
-                    >
-                      Xóa
+                <button className="icon-button" type="button" aria-label="Đóng" onClick={closeForm}>
+                  ×
+                </button>
+              </div>
+              <form onSubmit={(event) => void handleSubmit(event)}>
+                <div className="form-grid">
+                  <label className="full-field">
+                    Tên sản phẩm <span aria-hidden="true">*</span>
+                    <input
+                      required
+                      value={draft.name}
+                      onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Mã sản phẩm <span className="optional-label">(không bắt buộc)</span>
+                    <input
+                      value={draft.sku}
+                      onChange={(event) => setDraft({ ...draft, sku: event.target.value })}
+                      placeholder="Ví dụ: CF-001"
+                      aria-describedby="product-code-help"
+                    />
+                    <small id="product-code-help" className="field-help">
+                      Mã riêng giúp tìm và phân biệt sản phẩm nhanh hơn (còn gọi là SKU).
+                    </small>
+                  </label>
+                  <label>
+                    Thương hiệu
+                    <input
+                      value={draft.brand}
+                      onChange={(event) => setDraft({ ...draft, brand: event.target.value })}
+                      list="brand-suggestions"
+                      placeholder="Chọn hoặc nhập mới"
+                    />
+                  </label>
+                  <label className="full-field">
+                    Nhóm sản phẩm
+                    <input
+                      value={draft.category}
+                      onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+                      list="category-suggestions"
+                      placeholder="Chọn hoặc nhập mới"
+                    />
+                  </label>
+                  <datalist id="brand-suggestions">
+                    {brands.map((brand) => (
+                      <option key={brand} value={brand} />
+                    ))}
+                  </datalist>
+                  <datalist id="category-suggestions">
+                    {categories.map((category) => (
+                      <option key={category} value={category} />
+                    ))}
+                  </datalist>
+                </div>
+                <fieldset className="units-fieldset">
+                  <div className="units-heading">
+                    <div>
+                      <legend>
+                        Đơn vị bán <span aria-hidden="true">*</span>
+                      </legend>
+                      <p>Giá là số nguyên, đơn vị VND.</p>
+                    </div>
+                    <button className="secondary-button" type="button" onClick={addUnit}>
+                      + Thêm đơn vị
                     </button>
                   </div>
-                ))}
-              </fieldset>
-              <div className="dialog-actions">
-                <button className="secondary-button" type="button" onClick={closeForm}>
-                  Hủy
-                </button>
-                <button className="primary-button" type="submit" disabled={isSaving}>
-                  {isSaving ? "Đang lưu…" : "Lưu sản phẩm"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
-    </main>
+                  {draft.units.map((unit, index) => (
+                    <div className="unit-row" key={unit.key}>
+                      <label>
+                        Tên đơn vị
+                        <input
+                          required
+                          value={unit.name}
+                          onChange={(event) => updateUnit(unit.key, "name", event.target.value)}
+                          placeholder="Ví dụ: Chai"
+                        />
+                      </label>
+                      <label>
+                        Giá bán
+                        <input
+                          required
+                          inputMode="numeric"
+                          value={unit.price}
+                          onChange={(event) => updateUnit(unit.key, "price", event.target.value)}
+                          placeholder="0"
+                          aria-label={`Giá bán đơn vị ${index + 1}`}
+                        />
+                      </label>
+                      <button
+                        className="remove-unit"
+                        type="button"
+                        onClick={() => removeUnit(unit.key)}
+                        aria-label={`Xóa đơn vị ${index + 1}`}
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  ))}
+                </fieldset>
+                <div className="dialog-actions">
+                  <button className="secondary-button" type="button" onClick={closeForm}>
+                    Hủy
+                  </button>
+                  <button className="primary-button" type="submit" disabled={isSaving}>
+                    {isSaving ? "Đang lưu…" : "Lưu sản phẩm"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
 
@@ -411,10 +609,32 @@ function optionalText(value: string): string | null {
   return value.trim() === "" ? null : value;
 }
 
+function uniqueValues(values: readonly (string | null)[]): readonly string[] {
+  return [...new Set(values.filter((value): value is string => value !== null))].sort((a, b) =>
+    a.localeCompare(b, "vi"),
+  );
+}
+
+function normalizeSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("vi")
+    .trim();
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toLocaleUpperCase("vi") ?? "")
+    .join("");
+}
+
 function toUserMessage(error: ProductCatalogError): string {
   switch (error.code) {
     case "sku_conflict":
-      return `SKU “${error.sku}” đã được sử dụng. Vui lòng nhập SKU khác.`;
+      return `Mã sản phẩm “${error.sku}” đã được sử dụng. Vui lòng nhập mã khác.`;
     case "not_found":
       return "Không tìm thấy sản phẩm. Hãy làm mới danh mục và thử lại.";
     case "persistence":

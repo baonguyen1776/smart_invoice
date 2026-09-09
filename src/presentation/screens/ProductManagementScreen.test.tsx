@@ -41,8 +41,9 @@ function makeActions(products: readonly Product[] = []): ProductManagementAction
 describe("ProductManagementScreen", () => {
   it("renders Product disambiguators and active Unit prices", async () => {
     render(<ProductManagementScreen actions={makeActions([makeProduct()])} />);
-    expect(await screen.findByText("SKU CF-01")).toBeVisible();
-    expect(screen.getByText("An Nhiên · Đồ uống")).toBeVisible();
+    expect(await screen.findByText("CF-01")).toBeVisible();
+    expect(screen.getAllByText("An Nhiên").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Đồ uống").length).toBeGreaterThan(0);
     expect(screen.getByText(/85.000/)).toBeVisible();
   });
 
@@ -51,12 +52,14 @@ describe("ProductManagementScreen", () => {
     const create = vi.mocked(actions.createProduct.execute);
     render(<ProductManagementScreen actions={actions} />);
     await screen.findByText("Chưa có sản phẩm");
-    fireEvent.click(screen.getByRole("button", { name: /Thêm sản phẩm/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Thêm sản phẩm/ })[0]);
     const dialog = screen.getByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText(/Tên sản phẩm/), {
       target: { value: "Nước suối" },
     });
-    fireEvent.change(within(dialog).getByLabelText("SKU"), { target: { value: "NS-01" } });
+    fireEvent.change(within(dialog).getByLabelText(/Mã sản phẩm/), {
+      target: { value: "NS-01" },
+    });
     fireEvent.change(within(dialog).getByLabelText("Tên đơn vị"), { target: { value: "Chai" } });
     fireEvent.change(within(dialog).getByLabelText("Giá bán đơn vị 1"), {
       target: { value: "12000" },
@@ -79,12 +82,14 @@ describe("ProductManagementScreen", () => {
       err({ code: "sku_conflict" as const, sku: "CF-01" }),
     );
     render(<ProductManagementScreen actions={actions} />);
-    await screen.findByText("SKU CF-01");
+    await screen.findByText("CF-01");
     fireEvent.click(screen.getByRole("button", { name: "Chỉnh sửa" }));
     fireEvent.click(screen.getByRole("button", { name: "Xóa đơn vị 1" }));
     expect(screen.getByRole("alert")).toHaveTextContent("ít nhất một đơn vị");
     fireEvent.click(screen.getByRole("button", { name: "Lưu sản phẩm" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("SKU “CF-01” đã được sử dụng");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Mã sản phẩm “CF-01” đã được sử dụng",
+    );
   });
 
   it("requires confirmation before soft-deactivation", async () => {
@@ -95,10 +100,10 @@ describe("ProductManagementScreen", () => {
       .mockReturnValueOnce(true);
     const deactivate = vi.mocked(actions.deactivateProduct.execute);
     render(<ProductManagementScreen actions={actions} />);
-    await screen.findByText("SKU CF-01");
-    fireEvent.click(screen.getByRole("button", { name: "Ngừng sử dụng" }));
+    await screen.findByText("CF-01");
+    fireEvent.click(screen.getByRole("button", { name: "Ngừng bán" }));
     expect(deactivate).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Ngừng sử dụng" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ngừng bán" }));
     await waitFor(() => expect(deactivate).toHaveBeenCalledWith({ productId: PRODUCT_ID }));
     expect(confirm).toHaveBeenCalledTimes(2);
   });

@@ -5,3 +5,4 @@ src-tauri
 coverage
 package-lock.json
 *.md
+.agents
