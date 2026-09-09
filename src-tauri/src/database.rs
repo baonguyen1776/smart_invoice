@@ -439,6 +439,7 @@ fn persistence_message(operation: &str, message: &str) -> ProductCommandError {
 mod tests {
     use super::*;
     include!("database_regression_tests.rs");
+    include!("database_benchmark.rs");
 
     const PRODUCT_ID: &str = "11111111-1111-4111-8111-111111111111";
     const SECOND_PRODUCT_ID: &str = "33333333-3333-4333-8333-333333333333";
