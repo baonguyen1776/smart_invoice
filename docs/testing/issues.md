@@ -44,6 +44,18 @@ These samples meet the corresponding repository/startup budgets. First-install s
 
 TDD covered missing Product factories (6 initial failures), duplicate Unit IDs (1 failure), missing use cases, and invalid runtime Unit input (4 failures), then passed after implementation. Tests verify normalization, validation, typed errors, reconciliation, visibility and idempotent deactivation. Numeric coverage was not measured; SQLite belongs to #4.
 
+## #13 — Product Management UI
+
+[Issue #13](https://github.com/baonguyen1776/smart_invoice/issues/13) — implementation checks passed on 2026-09-09.
+
+- Product Management loads only active Products through `ListProducts` and displays SKU, brand, category, active Units, and integer-VND prices.
+- Create/edit forms call Application use cases, support multiple owned Units, and preserve soft-deactivation semantics when an existing Unit is removed.
+- Product deactivation requires explicit confirmation and calls `DeactivateProduct`; no hard-delete path was added.
+- Presentation tests cover catalog disambiguation, create input mapping, last-active-Unit protection, duplicate-SKU messaging, and deactivation confirmation.
+- Frontend: 73 tests across 6 files passed; typecheck, lint, build, format, and diff checks passed.
+
+Manual Tauri verification at 1366×768 and a complete keyboard-only pass remain to be recorded before marking the issue Done.
+
 ## Run checks
 
 From the repository root; native smoke requires a graphical desktop, creates an isolated profile and times out after 30 seconds per process.
