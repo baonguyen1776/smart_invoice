@@ -478,16 +478,22 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
               </div>
               <form onSubmit={(event) => void handleSubmit(event)}>
                 <div className="form-grid">
-                  <label className="full-field">
-                    Tên sản phẩm <span aria-hidden="true">*</span>
+                  <label>
+                    <span className="field-label">
+                      Tên sản phẩm <span aria-hidden="true">*</span>
+                    </span>
                     <input
                       required
                       value={draft.name}
                       onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                      placeholder="Ví dụ: Cà phê rang xay"
                     />
+                    <small className="field-help">Tên hiển thị khi tìm kiếm và lập hóa đơn.</small>
                   </label>
                   <label>
-                    Mã sản phẩm <span className="optional-label">(không bắt buộc)</span>
+                    <span className="field-label">
+                      Mã sản phẩm <span className="optional-label">(không bắt buộc)</span>
+                    </span>
                     <input
                       value={draft.sku}
                       onChange={(event) => setDraft({ ...draft, sku: event.target.value })}
@@ -499,22 +505,28 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                     </small>
                   </label>
                   <label>
-                    Thương hiệu
+                    <span className="field-label">
+                      Thương hiệu <span className="optional-label">(không bắt buộc)</span>
+                    </span>
                     <input
                       value={draft.brand}
                       onChange={(event) => setDraft({ ...draft, brand: event.target.value })}
                       list="brand-suggestions"
                       placeholder="Chọn hoặc nhập mới"
                     />
+                    <small className="field-help">Có thể chọn nhanh một thương hiệu đã dùng.</small>
                   </label>
-                  <label className="full-field">
-                    Nhóm sản phẩm
+                  <label>
+                    <span className="field-label">
+                      Nhóm sản phẩm <span className="optional-label">(không bắt buộc)</span>
+                    </span>
                     <input
                       value={draft.category}
                       onChange={(event) => setDraft({ ...draft, category: event.target.value })}
                       list="category-suggestions"
                       placeholder="Chọn hoặc nhập mới"
                     />
+                    <small className="field-help">Có thể chọn nhanh một nhóm đã dùng.</small>
                   </label>
                   <datalist id="brand-suggestions">
                     {brands.map((brand) => (

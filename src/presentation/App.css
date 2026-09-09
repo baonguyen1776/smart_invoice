@@ -314,7 +314,7 @@ h2 {
 input,
 select {
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
   padding: 9px 11px;
   border: 1px solid #cfd6d0;
   border-radius: 8px;
@@ -514,7 +514,7 @@ tbody tr:hover {
   backdrop-filter: blur(3px);
 }
 .product-dialog {
-  width: min(720px, 100%);
+  width: min(760px, 100%);
   max-height: calc(100vh - 48px);
   padding: 26px;
   overflow-y: auto;
@@ -564,8 +564,14 @@ tbody tr:hover {
   font-size: 13px;
   font-weight: 700;
 }
-.full-field {
-  grid-column: 1 / -1;
+.form-grid label {
+  grid-template-rows: 20px 44px minmax(32px, auto);
+}
+.field-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
 .optional-label {
   color: var(--muted);
@@ -594,7 +600,7 @@ tbody tr:hover {
 }
 .unit-row {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) 64px;
   gap: 12px;
   align-items: end;
   margin-top: 12px;
@@ -692,8 +698,7 @@ tbody tr:hover {
   .unit-row {
     grid-template-columns: 1fr;
   }
-  .search-box,
-  .full-field {
+  .search-box {
     grid-column: auto;
   }
 }
