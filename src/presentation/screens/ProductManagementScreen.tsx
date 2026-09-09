@@ -46,11 +46,16 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
   const [products, setProducts] = useState<readonly Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productPendingDeactivation, setProductPendingDeactivation] = useState<Product | null>(
+    null,
+  );
   const [draft, setDraft] = useState<ProductDraft>(EMPTY_DRAFT);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deactivationError, setDeactivationError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -211,15 +216,16 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
   }
 
   async function handleDeactivate(product: Product) {
-    if (!window.confirm(`Ngừng sử dụng “${product.name}”? Sản phẩm vẫn được giữ trong lịch sử.`))
-      return;
-    setError(null);
+    setIsDeactivating(true);
+    setDeactivationError(null);
     setMessage(null);
     const result = await actions.deactivateProduct.execute({ productId: product.id });
+    setIsDeactivating(false);
     if (!result.ok) {
-      setError(toUserMessage(result.error));
+      setDeactivationError(toUserMessage(result.error));
       return;
     }
+    setProductPendingDeactivation(null);
     setMessage("Đã ngừng sử dụng sản phẩm.");
     await loadProducts();
   }
@@ -445,15 +451,26 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                       </td>
                       <td>
                         <div className="row-actions">
-                          <button type="button" onClick={() => openEditForm(product)}>
-                            Chỉnh sửa
+                          <button
+                            className="icon-action"
+                            type="button"
+                            onClick={() => openEditForm(product)}
+                            aria-label={`Chỉnh sửa ${product.name}`}
+                            title="Chỉnh sửa"
+                          >
+                            <EditIcon />
                           </button>
                           <button
-                            className="danger-link"
+                            className="icon-action danger-link"
                             type="button"
-                            onClick={() => void handleDeactivate(product)}
+                            onClick={() => {
+                              setDeactivationError(null);
+                              setProductPendingDeactivation(product);
+                            }}
+                            aria-label={`Ngừng bán ${product.name}`}
+                            title="Ngừng bán"
                           >
-                            Ngừng bán
+                            <DeactivateIcon />
                           </button>
                         </div>
                       </td>
@@ -603,8 +620,77 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
             </section>
           </div>
         )}
+        {productPendingDeactivation && (
+          <div className="modal-backdrop" role="presentation">
+            <section
+              className="confirm-dialog"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="deactivate-title"
+              aria-describedby="deactivate-description"
+            >
+              <span className="confirm-icon" aria-hidden="true">
+                <DeactivateIcon />
+              </span>
+              <h2 id="deactivate-title">Ngừng bán sản phẩm?</h2>
+              <p id="deactivate-description">
+                “{productPendingDeactivation.name}” sẽ không còn xuất hiện khi tạo hóa đơn mới. Dữ
+                liệu cũ vẫn được giữ nguyên.
+              </p>
+              {deactivationError && (
+                <p className="confirm-error" role="alert">
+                  {deactivationError}
+                </p>
+              )}
+              <div className="dialog-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    setDeactivationError(null);
+                    setProductPendingDeactivation(null);
+                  }}
+                  disabled={isDeactivating}
+                >
+                  Hủy
+                </button>
+                <button
+                  className="danger-button"
+                  type="button"
+                  onClick={() => void handleDeactivate(productPendingDeactivation)}
+                  disabled={isDeactivating}
+                >
+                  {isDeactivating ? "Đang xử lý…" : "Xác nhận ngừng bán"}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
       </main>
     </div>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+      <path
+        d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="m13.5 6.5 4 4" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function DeactivateIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m7 7 10 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   );
 }
 

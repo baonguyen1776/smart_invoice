@@ -83,7 +83,7 @@ describe("ProductManagementScreen", () => {
     );
     render(<ProductManagementScreen actions={actions} />);
     await screen.findByText("CF-01");
-    fireEvent.click(screen.getByRole("button", { name: "Chỉnh sửa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chỉnh sửa Cà phê rang xay" }));
     fireEvent.click(screen.getByRole("button", { name: "Xóa đơn vị 1" }));
     expect(screen.getByRole("alert")).toHaveTextContent("ít nhất một đơn vị");
     fireEvent.click(screen.getByRole("button", { name: "Lưu sản phẩm" }));
@@ -94,17 +94,32 @@ describe("ProductManagementScreen", () => {
 
   it("requires confirmation before soft-deactivation", async () => {
     const actions = makeActions([makeProduct()]);
-    const confirm = vi
-      .spyOn(window, "confirm")
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
     const deactivate = vi.mocked(actions.deactivateProduct.execute);
     render(<ProductManagementScreen actions={actions} />);
     await screen.findByText("CF-01");
-    fireEvent.click(screen.getByRole("button", { name: "Ngừng bán" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ngừng bán Cà phê rang xay" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Ngừng bán sản phẩm?" });
     expect(deactivate).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Ngừng bán" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Hủy" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ngừng bán Cà phê rang xay" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận ngừng bán" }));
     await waitFor(() => expect(deactivate).toHaveBeenCalledWith({ productId: PRODUCT_ID }));
-    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the confirmation open and shows a native deactivation failure", async () => {
+    const actions = makeActions([makeProduct()]);
+    actions.deactivateProduct.execute = vi.fn(async () =>
+      err({ code: "persistence" as const, operation: "deactivate" as const, message: "hidden" }),
+    );
+    render(<ProductManagementScreen actions={actions} />);
+    await screen.findByText("CF-01");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ngừng bán Cà phê rang xay" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận ngừng bán" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Không thể lưu dữ liệu");
+    expect(screen.getByRole("alertdialog")).toBeVisible();
   });
 });

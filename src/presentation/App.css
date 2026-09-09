@@ -499,12 +499,23 @@ tbody tr {
   gap: 4px;
 }
 .row-actions button {
-  min-height: 34px;
-  padding: 0 8px;
+  min-height: 36px;
+  padding: 0 9px;
   color: #31527f;
   background: transparent;
   font-size: 12px;
   white-space: nowrap;
+}
+.row-actions .icon-action {
+  display: inline-grid;
+  width: 36px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.row-actions .icon-action:hover {
+  border-color: #bfdbfe;
 }
 .row-actions button:hover {
   background: #eaf1ff;
@@ -513,6 +524,7 @@ tbody tr {
   color: var(--danger);
 }
 .row-actions .danger-link:hover {
+  border-color: #fecaca;
   background: #fff0ef;
 }
 .empty-state {
@@ -568,6 +580,61 @@ tbody tr {
     0 0 0 1px rgba(34, 211, 238, 0.2),
     0 28px 72px rgba(15, 40, 90, 0.3);
   animation: dialog-enter 180ms ease-out;
+}
+.confirm-dialog {
+  width: min(440px, 100%);
+  padding: 28px;
+  border: 1px solid #dbe5f5;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.16),
+    0 28px 72px rgba(15, 40, 90, 0.3);
+  animation: dialog-enter 180ms ease-out;
+}
+.confirm-dialog h2 {
+  margin: 16px 0 8px;
+  font-size: 21px;
+}
+.confirm-dialog p {
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.confirm-dialog .confirm-error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #8f2e2e;
+  background: #fce8e6;
+}
+.confirm-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--danger);
+  background: #fff0ef;
+}
+.danger-button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--danger);
+  font-weight: 700;
+  cursor: pointer;
+}
+.danger-button:hover {
+  background: #982f2f;
+}
+.danger-button:disabled,
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.5;
 }
 @keyframes dialog-enter {
   from {
