@@ -43,3 +43,5 @@ Measurable performance, reliability, recovery, security, compatibility, and
 accessibility targets are maintained in
 [`docs/non-functional-requirements.md`](docs/non-functional-requirements.md).
 Targets marked `Proposed` are not binding until human approval.
+
+Issue test results, benchmarks, and rerun commands: [verification notes](docs/testing/issues.md).
