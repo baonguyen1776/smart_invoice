@@ -1,12 +1,19 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { App } from "./App.tsx";
+import { describe, expect, it, vi } from "vitest";
+import { ok } from "../application/shared/Result";
+import type { ProductManagementActions } from "./screens/ProductManagementScreen";
+import { App } from "./App";
 
 describe("App", () => {
-  it("shows that the Smart Invoice application foundation is ready", () => {
-    render(<App />);
-
-    expect(screen.getByRole("heading", { name: "Smart Invoice" })).toBeVisible();
-    expect(screen.getByText("Application foundation is ready.")).toBeVisible();
+  it("opens the Product Management capability", async () => {
+    const actions: ProductManagementActions = {
+      listProducts: { execute: vi.fn(async () => ok([])) },
+      createProduct: { execute: vi.fn() },
+      updateProduct: { execute: vi.fn() },
+      deactivateProduct: { execute: vi.fn() },
+    };
+    render(<App productActions={actions} />);
+    expect(await screen.findByRole("heading", { name: "Quản lý sản phẩm" })).toBeVisible();
+    expect(await screen.findByText("Chưa có sản phẩm")).toBeVisible();
   });
 });
