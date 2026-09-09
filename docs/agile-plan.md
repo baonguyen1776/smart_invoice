@@ -152,6 +152,11 @@ where business logic lives, how DB migrations work, and what agents must not tou
 
 ## Definition of Done (per story)
 
+Applicable approved requirements in
+[`non-functional-requirements.md`](non-functional-requirements.md) are part of
+the story Definition of Done. Proposed targets require human approval before
+they become delivery gates.
+
 - [ ] Feature runs and matches the agreed Use Case flow
 - [ ] Code respects the 4-layer boundaries (no direct SQL in Presentation, no UI logic in Domain)
 - [ ] Manually tested against the relevant UC main/alternate/exception flows

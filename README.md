@@ -36,3 +36,10 @@ Infrastructure → Application/Domain interfaces
 
 The stack is Tauri v2, React, TypeScript, Vite, SQLite, Fuse.js, and the
 approved printer abstraction.
+
+## Quality requirements
+
+Measurable performance, reliability, recovery, security, compatibility, and
+accessibility targets are maintained in
+[`docs/non-functional-requirements.md`](docs/non-functional-requirements.md).
+Targets marked `Proposed` are not binding until human approval.
