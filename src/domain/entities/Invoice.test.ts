@@ -26,21 +26,32 @@ function item(id = ITEM_ID, price = 12_000, quantity = 2): InvoiceItem {
 
 describe("Invoice", () => {
   it("creates an empty draft with a positive invoice number", () => {
-    const invoice = Invoice.createDraft({ id: INVOICE_ID, invoiceNumber: 1, createdAt: CREATED_AT });
+    const invoice = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      createdAt: CREATED_AT,
+    });
 
     expect(invoice).toMatchObject({ status: "draft", total: 0, completedAt: null, items: [] });
   });
 
   it("recalculates total whenever draft items change", () => {
-    const invoice = Invoice.createDraft({ id: INVOICE_ID, invoiceNumber: 1, createdAt: CREATED_AT })
-      .replaceDraftItems([item()], UPDATED_AT);
+    const invoice = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      createdAt: CREATED_AT,
+    }).replaceDraftItems([item()], UPDATED_AT);
 
     expect(invoice.total).toBe(24_000);
     expect(invoice.updatedAt).toBe(UPDATED_AT);
   });
 
   it("rejects duplicate or foreign item identities", () => {
-    const invoice = Invoice.createDraft({ id: INVOICE_ID, invoiceNumber: 1, createdAt: CREATED_AT });
+    const invoice = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      createdAt: CREATED_AT,
+    });
     const foreign = InvoiceItem.create({
       ...item().toState(),
       id: "20000000-0000-4000-8000-000000000002",
@@ -52,7 +63,11 @@ describe("Invoice", () => {
   });
 
   it("rejects an unsafe aggregate total", () => {
-    const invoice = Invoice.createDraft({ id: INVOICE_ID, invoiceNumber: 1, createdAt: CREATED_AT });
+    const invoice = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      createdAt: CREATED_AT,
+    });
     const first = item(ITEM_ID, Number.MAX_SAFE_INTEGER, 1);
     const second = item("20000000-0000-4000-8000-000000000002", 1, 1);
 
@@ -69,7 +84,11 @@ describe("Invoice", () => {
   });
 
   it("overwrites a completed invoice while preserving its identity and completion time", () => {
-    const completed = Invoice.createDraft({ id: INVOICE_ID, invoiceNumber: 42, createdAt: CREATED_AT })
+    const completed = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 42,
+      createdAt: CREATED_AT,
+    })
       .replaceDraftItems([item()], UPDATED_AT)
       .complete(COMPLETED_AT);
     const replacement = item("20000000-0000-4000-8000-000000000002", 15_000, 3);

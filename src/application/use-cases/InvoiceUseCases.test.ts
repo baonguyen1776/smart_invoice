@@ -42,9 +42,17 @@ function line(id = ITEM_ID): InvoiceItem {
 describe("Invoice use cases", () => {
   it("creates and immediately persists an empty numbered draft atomically", async () => {
     const repository = new InMemoryInvoiceRepository([], 18);
-    const result = await new CreateInvoiceDraft(repository, { generate: () => INVOICE_ID }, clock).execute();
+    const result = await new CreateInvoiceDraft(
+      repository,
+      { generate: () => INVOICE_ID },
+      clock,
+    ).execute();
 
-    expect(result.ok && result.value).toMatchObject({ invoiceNumber: 18, status: "draft", items: [] });
+    expect(result.ok && result.value).toMatchObject({
+      invoiceNumber: 18,
+      status: "draft",
+      items: [],
+    });
     expect(repository.createDraftCalls).toEqual([{ id: INVOICE_ID, createdAt: NOW }]);
   });
 
