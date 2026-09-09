@@ -439,6 +439,10 @@ Domain/Application contracts. SQLite table and column names use `snake_case`;
 Domain and Application code use the TypeScript naming rules in
 `CODING_CONVENTIONS.md`.
 
+Measurable quality targets for this architecture are defined in
+[`non-functional-requirements.md`](non-functional-requirements.md). Targets
+remain non-binding while their status is `Proposed`.
+
 ### 19.1 Shared Representations
 
 #### Identifiers
