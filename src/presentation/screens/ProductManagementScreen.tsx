@@ -401,19 +401,26 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                             {initials(product.name)}
                           </span>
                           <div>
-                            <strong>{product.name}</strong>
-                            <small>{product.brand ?? "Chưa có thương hiệu"}</small>
+                            <strong title={product.name}>{product.name}</strong>
+                            <small title={product.brand ?? undefined}>
+                              {product.brand ?? "Chưa có thương hiệu"}
+                            </small>
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span className={product.sku ? "product-code" : "muted"}>
+                        <span
+                          className={product.sku ? "product-code" : "muted"}
+                          title={product.sku ?? undefined}
+                        >
                           {product.sku ?? "Chưa đặt mã"}
                         </span>
                       </td>
                       <td>
                         {product.category ? (
-                          <span className="category-chip">{product.category}</span>
+                          <span className="category-chip" title={product.category}>
+                            {product.category}
+                          </span>
                         ) : (
                           <span className="muted">Chưa phân nhóm</span>
                         )}
@@ -424,7 +431,7 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                             .filter((unit) => unit.isActive)
                             .map((unit) => (
                               <span key={unit.id}>
-                                <small>{unit.name}</small>
+                                <small title={unit.name}>{unit.name}</small>
                                 <strong>{formatVnd(unit.price)}</strong>
                               </span>
                             ))}
