@@ -374,3 +374,587 @@ fn orphaned_product_is_not_silently_hidden_by_reads() {
             .is_empty());
     });
 }
+
+const INVOICE_ID: &str = "55555555-5555-4555-8555-555555555555";
+const SECOND_INVOICE_ID: &str = "66666666-6666-4666-8666-666666666666";
+const ITEM_ID: &str = "77777777-7777-4777-8777-777777777777";
+const SECOND_ITEM_ID: &str = "88888888-8888-4888-8888-888888888888";
+
+fn invoice_item(id: &str, invoice_id: &str, product_id: &str, unit_id: &str) -> InvoiceItemRecord {
+    InvoiceItemRecord {
+        id: id.to_string(),
+        invoice_id: invoice_id.to_string(),
+        product_id: product_id.to_string(),
+        unit_id: unit_id.to_string(),
+        product_name: "Coca Cola".to_string(),
+        product_sku: Some("SKU-1".to_string()),
+        product_brand: None,
+        unit_name: "Can".to_string(),
+        unit_price: 10_000,
+        quantity: 2,
+        subtotal: 20_000,
+        created_at: NOW.to_string(),
+    }
+}
+
+#[test]
+fn creates_invoice_draft_with_atomic_sequential_numbers() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        let draft1 = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(draft1.invoice_number, 1);
+        assert_eq!(draft1.status, "draft");
+        assert_eq!(draft1.total, 0);
+
+        let draft2 = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: SECOND_INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(draft2.invoice_number, 2);
+    });
+}
+
+#[test]
+fn saves_draft_items_and_recalculates_total_atomically() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true)
+            .await
+            .unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        draft.items.push(item);
+        draft.total = 20_000;
+        draft.updated_at = NOW.to_string();
+
+        persist_draft_items_and_total(&pool, draft).await.unwrap();
+
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.total, 20_000);
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(loaded.items[0].product_name, "Coca Cola");
+    });
+}
+
+#[test]
+fn completes_invoice_and_rejects_empty_draft() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true)
+            .await
+            .unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        // Không cho phép hoàn tất nếu không có item
+        draft.status = "completed".to_string();
+        draft.completed_at = Some(NOW.to_string());
+        assert!(persist_completed_invoice(&pool, draft.clone()).await.is_err());
+
+        // Thêm item và hoàn tất
+        draft.items.push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        draft.total = 20_000;
+        persist_completed_invoice(&pool, draft).await.unwrap();
+
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.status, "completed");
+        assert!(loaded.completed_at.is_some());
+    });
+}
+
+#[test]
+fn preserves_snapshots_after_catalog_mutations() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        let mut original_prod = product(PRODUCT_ID, UNIT_ID, None);
+        save_product(&pool, original_prod.clone(), "create", true).await.unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        draft.items.push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        draft.total = 20_000;
+        draft.status = "completed".to_string();
+        draft.completed_at = Some(NOW.to_string());
+        persist_completed_invoice(&pool, draft).await.unwrap();
+
+        // Bây giờ sửa tên và giá sản phẩm trong catalog
+        original_prod.name = "Pepsi Max".to_string();
+        original_prod.units[0].price = 99_000;
+        save_product(&pool, original_prod, "update", false).await.unwrap();
+
+        // Hóa đơn cũ đọc lên vẫn giữ nguyên snapshot "Coca Cola" giá 10,000
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.items[0].product_name, "Coca Cola");
+        assert_eq!(loaded.items[0].unit_price, 10_000);
+    });
+}
+
+#[test]
+fn overwrites_completed_invoice_preserving_identities() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+
+        let mut invoice = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        invoice.items.push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        invoice.total = 20_000;
+        invoice.status = "completed".to_string();
+        invoice.completed_at = Some(NOW.to_string());
+        persist_completed_invoice(&pool, invoice.clone()).await.unwrap();
+
+        // Ghi đè với số lượng mới
+        let mut updated = invoice.clone();
+        updated.items[0].quantity = 5;
+        updated.items[0].subtotal = 50_000;
+        updated.total = 50_000;
+        updated.updated_at = "2026-01-02T00:00:00.000Z".to_string();
+
+        persist_overwrite_completed(&pool, updated).await.unwrap();
+
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.total, 50_000);
+        assert_eq!(loaded.invoice_number, 1);
+        assert_eq!(loaded.created_at, NOW);
+        assert_eq!(loaded.completed_at, Some(NOW.to_string()));
+    });
+}
+
+#[test]
+fn file_database_reopens_committed_invoice_draft() {
+    tauri::async_runtime::block_on(async {
+        let file = TestDatabaseFile::new();
+        let pool = open_database(file.options()).await.unwrap();
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        draft.items.push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        draft.total = 20_000;
+        persist_draft_items_and_total(&pool, draft).await.unwrap();
+        pool.close().await;
+
+        // Khởi động lại database từ file
+        let pool = open_database(file.options()).await.unwrap();
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.invoice_number, 1);
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(loaded.total, 20_000);
+        pool.close().await;
+    });
+}
+
+#[test]
+fn rollback_on_injected_failure_preserves_invoice_state() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let valid_item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        draft.items.push(valid_item);
+        draft.total = 20_000;
+        persist_draft_items_and_total(&pool, draft.clone()).await.unwrap();
+
+        sqlx::query(&format!(
+            "CREATE TEMP TRIGGER reject_second_invoice_item
+             BEFORE INSERT ON invoice_items
+             WHEN NEW.id = '{SECOND_ITEM_ID}'
+             BEGIN SELECT RAISE(ABORT, 'injected invoice item failure'); END"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let mut replacement = draft.clone();
+        replacement
+            .items
+            .push(invoice_item(SECOND_ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        replacement.total = 40_000;
+
+        let result = persist_draft_items_and_total(&pool, replacement).await;
+        assert!(result.is_err());
+
+        sqlx::query("DROP TRIGGER reject_second_invoice_item")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Hóa đơn trong DB vẫn giữ nguyên 1 item hợp lệ ban đầu, không bị lưu dở dang
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(loaded.items[0].id, ITEM_ID);
+        assert_eq!(loaded.total, 20_000);
+    });
+}
+
+#[test]
+fn rejects_mismatched_totals_and_rolls_back_across_all_write_operations() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        draft.items.push(item.clone());
+
+        // 1. Mismatch on save_draft
+        draft.total = 10_000; // Expected 20_000
+        assert!(persist_draft_items_and_total(&pool, draft.clone()).await.is_err());
+        let check1 = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(check1.total, 0);
+        assert_eq!(check1.items.len(), 0);
+
+        // 2. Mismatch on completion
+        draft.total = 99_999;
+        draft.status = "completed".to_string();
+        draft.completed_at = Some(NOW.to_string());
+        assert!(persist_completed_invoice(&pool, draft.clone()).await.is_err());
+        let check2 = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(check2.status, "draft");
+        assert_eq!(check2.total, 0);
+
+        // Complete correctly first
+        draft.total = 20_000;
+        persist_completed_invoice(&pool, draft.clone()).await.unwrap();
+
+        // 3. Mismatch on overwrite_completed
+        let mut overwrite = draft.clone();
+        let mut second_item = item.clone();
+        second_item.id = SECOND_ITEM_ID.to_string();
+        overwrite.items.push(second_item);
+        overwrite.total = 99_999; // Expected 40_000
+        assert!(persist_overwrite_completed(&pool, overwrite).await.is_err());
+
+        // Verify completed invoice was untouched
+        let check3 = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(check3.total, 20_000);
+        assert_eq!(check3.items.len(), 1);
+    });
+}
+
+#[test]
+fn rejects_arithmetic_overflow_and_safe_integer_limit() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut unsafe_item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        unsafe_item.unit_price = 10_000_000_000_000_000;
+        unsafe_item.quantity = 1;
+        unsafe_item.subtotal = unsafe_item.unit_price;
+        draft.items.push(unsafe_item);
+        draft.total = 10_000_000_000_000_000;
+
+        assert!(persist_draft_items_and_total(&pool, draft.clone()).await.is_err());
+
+        let mut overflow_item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        overflow_item.unit_price = i64::MAX;
+        overflow_item.quantity = 2;
+        overflow_item.subtotal = 0;
+        draft.items = vec![overflow_item];
+        draft.total = 0;
+        assert!(persist_draft_items_and_total(&pool, draft).await.is_err());
+
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.total, 0);
+        assert_eq!(loaded.items.len(), 0);
+    });
+}
+
+#[test]
+fn validates_draft_identity_and_timestamp_before_insertion() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+
+        // Invalid UUID
+        let bad_id = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: "not-a-valid-uuid".to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await;
+        assert!(bad_id.is_err());
+
+        // Non-v4 UUID (version 1)
+        let non_v4 = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: "11111111-1111-1111-8111-111111111111".to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await;
+        assert!(non_v4.is_err());
+
+        // Invalid ISO timestamp
+        let bad_time = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: "2026-01-01 00:00:00".to_string(),
+            },
+        )
+        .await;
+        assert!(bad_time.is_err());
+
+        let impossible_date = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: "2026-02-31T00:00:00.000Z".to_string(),
+            },
+        )
+        .await;
+        assert!(impossible_date.is_err());
+
+        // Verify database is completely empty
+        assert_eq!(row_count(&pool, "invoices").await, 0);
+    });
+}
+
+#[test]
+fn rejects_invalid_timestamps_before_mutating_existing_invoices() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true)
+            .await
+            .unwrap();
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        draft
+            .items
+            .push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        draft.total = 20_000;
+
+        let mut invalid_save = draft.clone();
+        invalid_save.updated_at = "2026-04-31T00:00:00.000Z".to_string();
+        assert!(persist_draft_items_and_total(&pool, invalid_save).await.is_err());
+
+        let mut invalid_item = draft.clone();
+        invalid_item.items[0].created_at = "2025-02-29T00:00:00.000Z".to_string();
+        assert!(persist_draft_items_and_total(&pool, invalid_item).await.is_err());
+
+        let unchanged = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(unchanged.total, 0);
+        assert!(unchanged.items.is_empty());
+
+        draft.status = "completed".to_string();
+        draft.completed_at = Some("2026-02-31T00:00:00.000Z".to_string());
+        assert!(persist_completed_invoice(&pool, draft).await.is_err());
+
+        let unchanged = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(unchanged.status, "draft");
+        assert_eq!(unchanged.total, 0);
+        assert!(unchanged.items.is_empty());
+
+        let mut completed = unchanged;
+        completed
+            .items
+            .push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        completed.total = 20_000;
+        completed.status = "completed".to_string();
+        completed.completed_at = Some(NOW.to_string());
+        persist_completed_invoice(&pool, completed.clone())
+            .await
+            .unwrap();
+
+        completed.updated_at = "2026-02-31T00:00:00.000Z".to_string();
+        assert!(persist_overwrite_completed(&pool, completed).await.is_err());
+
+        let unchanged = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(unchanged.status, "completed");
+        assert_eq!(unchanged.total, 20_000);
+        assert_eq!(unchanged.items.len(), 1);
+    });
+}
+
+#[test]
+fn enforces_product_unit_ownership_and_rolls_back() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+        save_product(
+            &pool,
+            product(SECOND_PRODUCT_ID, OTHER_UNIT_ID, None),
+            "create",
+            true,
+        )
+        .await
+        .unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        // Pair PRODUCT_ID with OTHER_UNIT_ID (belongs to SECOND_PRODUCT_ID)
+        let mismatched_item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, OTHER_UNIT_ID);
+        draft.items.push(mismatched_item);
+        draft.total = 20_000;
+
+        // 1. Rollback on save_draft
+        assert!(persist_draft_items_and_total(&pool, draft.clone()).await.is_err());
+        let check1 = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(check1.items.len(), 0);
+
+        // 2. Rollback on complete
+        draft.status = "completed".to_string();
+        draft.completed_at = Some(NOW.to_string());
+        assert!(persist_completed_invoice(&pool, draft.clone()).await.is_err());
+        let check2 = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(check2.status, "draft");
+        assert_eq!(check2.items.len(), 0);
+
+        // Complete valid invoice
+        draft.items[0] = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        persist_completed_invoice(&pool, draft.clone()).await.unwrap();
+
+        // 3. Rollback on overwrite_completed
+        let mut overwrite = draft.clone();
+        overwrite.items[0] = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, OTHER_UNIT_ID);
+        assert!(persist_overwrite_completed(&pool, overwrite).await.is_err());
+        let check3 = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(check3.items[0].unit_id, UNIT_ID);
+    });
+}
+
+#[test]
+fn allows_inactive_product_and_unit_ownership_for_historical_items() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+
+        let mut draft = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        draft.items.push(item);
+        draft.total = 20_000;
+        draft.status = "completed".to_string();
+        draft.completed_at = Some(NOW.to_string());
+        persist_completed_invoice(&pool, draft.clone()).await.unwrap();
+
+        set_product_inactive(&pool, PRODUCT_ID, NOW).await.unwrap();
+        sqlx::query("UPDATE units SET is_active = 0 WHERE id = ?")
+            .bind(UNIT_ID)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        draft.items[0].quantity = 3;
+        draft.items[0].subtotal = 30_000;
+        draft.total = 30_000;
+        draft.updated_at = "2026-01-02T00:00:00.000Z".to_string();
+        persist_overwrite_completed(&pool, draft).await.unwrap();
+
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(loaded.items[0].product_id, PRODUCT_ID);
+        assert_eq!(loaded.items[0].unit_id, UNIT_ID);
+        assert_eq!(loaded.total, 30_000);
+    });
+}

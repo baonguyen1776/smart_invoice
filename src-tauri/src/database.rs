@@ -45,6 +45,50 @@ pub struct ProductRecord {
     pub units: Vec<UnitRecord>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceItemRecord {
+    pub id: String,
+    pub invoice_id: String,
+    pub product_id: String,
+    pub unit_id: String,
+    pub product_name: String,
+    pub product_sku: Option<String>,
+    pub product_brand: Option<String>,
+    pub unit_name: String,
+    pub unit_price: i64,
+    pub quantity: i64,
+    pub subtotal: i64,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceRecord {
+    pub id: String,
+    pub invoice_number: i64,
+    pub status: String,
+    pub total: i64,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+
+    pub items: Vec<InvoiceItemRecord>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateInvoiceDraftInput {
+    pub id: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "code", rename_all = "snake_case")]
+pub enum InvoiceCommandError {
+    Persistence { operation: String, message: String },
+}
+
 #[derive(Debug, Serialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum ProductCommandError {
@@ -135,6 +179,501 @@ pub async fn list_products(
     fetch_products(&state.0, activity)
         .await
         .map_err(|error| persistence("list", error))
+}
+
+#[tauri::command]
+pub async fn create_invoice_draft(
+    state: State<'_, DatabaseState>,
+    input: CreateInvoiceDraftInput,
+) -> Result<InvoiceRecord, InvoiceCommandError> {
+    insert_invoice_draft(&state.0, input)
+        .await
+        .map_err(|error| invoice_persistence("create_draft", error))
+}
+
+#[tauri::command]
+pub async fn get_invoice(
+    state: State<'_, DatabaseState>,
+    invoice_id: String,
+) -> Result<Option<InvoiceRecord>, InvoiceCommandError> {
+    fetch_invoice(&state.0, &invoice_id)
+        .await
+        .map_err(|error| invoice_persistence("get", error))
+}
+
+#[tauri::command]
+pub async fn save_invoice_draft(
+    state: State<'_, DatabaseState>,
+    invoice: InvoiceRecord,
+) -> Result<(), InvoiceCommandError> {
+    persist_draft_items_and_total(&state.0, invoice)
+        .await
+        .map_err(|error| invoice_persistence("save_draft", error))
+}
+
+#[tauri::command]
+pub async fn complete_invoice(
+    state: State<'_, DatabaseState>,
+    invoice: InvoiceRecord,
+) -> Result<(), InvoiceCommandError> {
+    persist_completed_invoice(&state.0, invoice)
+        .await
+        .map_err(|error| invoice_persistence("complete", error))
+}
+
+#[tauri::command]
+pub async fn overwrite_completed_invoice(
+    state: State<'_, DatabaseState>,
+    invoice: InvoiceRecord,
+) -> Result<(), InvoiceCommandError> {
+    persist_overwrite_completed(&state.0, invoice)
+        .await
+        .map_err(|error| invoice_persistence("overwrite_completed", error))
+}
+
+const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
+
+fn is_uuid_v4(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.len() != 36 {
+        return false;
+    }
+    for (i, &b) in bytes.iter().enumerate() {
+        match i {
+            8 | 13 | 18 | 23 => {
+                if b != b'-' {
+                    return false;
+                }
+            }
+            14 => {
+                if b != b'4' {
+                    return false;
+                }
+            }
+            19 => {
+                if !matches!(b, b'8' | b'9' | b'a' | b'b' | b'A' | b'B') {
+                    return false;
+                }
+            }
+            _ => {
+                if !b.is_ascii_hexdigit() {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+fn is_canonical_iso8601_utc(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 24 {
+        return false;
+    }
+    if b[4] != b'-'
+        || b[7] != b'-'
+        || b[10] != b'T'
+        || b[13] != b':'
+        || b[16] != b':'
+        || b[19] != b'.'
+        || b[23] != b'Z'
+    {
+        return false;
+    }
+    let digits_indices = [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 21, 22];
+    for &idx in &digits_indices {
+        if !b[idx].is_ascii_digit() {
+            return false;
+        }
+    }
+    let parse2 =
+        |start: usize| -> u32 { (b[start] - b'0') as u32 * 10 + (b[start + 1] - b'0') as u32 };
+    let year = ((b[0] - b'0') as u32 * 1_000)
+        + ((b[1] - b'0') as u32 * 100)
+        + ((b[2] - b'0') as u32 * 10)
+        + (b[3] - b'0') as u32;
+    let month = parse2(5);
+    let day = parse2(8);
+    let hour = parse2(11);
+    let minute = parse2(14);
+    let second = parse2(17);
+
+    if !(1..=12).contains(&month) || hour > 23 || minute > 59 || second > 59 {
+        return false;
+    }
+
+    let days_in_month = match month {
+        2 if year.is_multiple_of(400) || (year.is_multiple_of(4) && !year.is_multiple_of(100)) => {
+            29
+        }
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    (1..=days_in_month).contains(&day)
+}
+
+fn validate_invoice_timestamps(invoice: &InvoiceRecord) -> Result<(), sqlx::Error> {
+    let valid_header_timestamps = is_canonical_iso8601_utc(&invoice.created_at)
+        && is_canonical_iso8601_utc(&invoice.updated_at)
+        && invoice
+            .completed_at
+            .as_deref()
+            .is_none_or(is_canonical_iso8601_utc);
+    let valid_item_timestamps = invoice
+        .items
+        .iter()
+        .all(|item| is_canonical_iso8601_utc(&item.created_at));
+
+    if !valid_header_timestamps || !valid_item_timestamps {
+        return Err(sqlx::Error::Protocol(
+            "Invoice timestamps must be canonical ISO-8601 UTC values.".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn calculate_and_validate_total(
+    items: &[InvoiceItemRecord],
+    supplied_total: i64,
+) -> Result<i64, sqlx::Error> {
+    let mut total: i64 = 0;
+    for item in items {
+        if item.subtotal < 0 || item.subtotal > MAX_SAFE_INTEGER {
+            return Err(sqlx::Error::Protocol(
+                "Item subtotal out of safe integer range.".into(),
+            ));
+        }
+        let calculated_subtotal = item
+            .unit_price
+            .checked_mul(item.quantity)
+            .ok_or_else(|| sqlx::Error::Protocol("Item subtotal arithmetic overflow.".into()))?;
+        if calculated_subtotal != item.subtotal {
+            return Err(sqlx::Error::Protocol(
+                "Item subtotal does not match unit_price * quantity.".into(),
+            ));
+        }
+        total = total
+            .checked_add(item.subtotal)
+            .ok_or_else(|| sqlx::Error::Protocol("Invoice total arithmetic overflow.".into()))?;
+        if total > MAX_SAFE_INTEGER {
+            return Err(sqlx::Error::Protocol(
+                "Invoice total exceeds safe integer limit.".into(),
+            ));
+        }
+    }
+    if total != supplied_total {
+        return Err(sqlx::Error::Protocol(
+            "Supplied invoice total does not match calculated total.".into(),
+        ));
+    }
+    Ok(total)
+}
+
+async fn validate_item_ownership_and_insert(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    invoice_id: &str,
+    item: &InvoiceItemRecord,
+) -> Result<(), sqlx::Error> {
+    let owned_product_id: Option<String> =
+        sqlx::query_scalar("SELECT product_id FROM units WHERE id = ?")
+            .bind(&item.unit_id)
+            .fetch_optional(&mut **transaction)
+            .await?;
+
+    let Some(product_id) = owned_product_id else {
+        return Err(sqlx::Error::Protocol(format!(
+            "Unit {} not found.",
+            item.unit_id
+        )));
+    };
+
+    if product_id != item.product_id {
+        return Err(sqlx::Error::Protocol(format!(
+            "Unit {} does not belong to Product {}.",
+            item.unit_id, item.product_id
+        )));
+    }
+
+    sqlx::query(
+        "INSERT INTO invoice_items
+         (id, invoice_id, product_id, unit_id, product_name, product_sku, product_brand,
+          unit_name, unit_price, quantity, subtotal, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&item.id)
+    .bind(invoice_id)
+    .bind(&item.product_id)
+    .bind(&item.unit_id)
+    .bind(&item.product_name)
+    .bind(&item.product_sku)
+    .bind(&item.product_brand)
+    .bind(&item.unit_name)
+    .bind(item.unit_price)
+    .bind(item.quantity)
+    .bind(item.subtotal)
+    .bind(&item.created_at)
+    .execute(&mut **transaction)
+    .await?;
+
+    Ok(())
+}
+
+async fn insert_invoice_draft(
+    pool: &SqlitePool,
+    input: CreateInvoiceDraftInput,
+) -> Result<InvoiceRecord, sqlx::Error> {
+    if !is_uuid_v4(&input.id) {
+        return Err(sqlx::Error::Protocol("id must be a valid UUID v4.".into()));
+    }
+    if !is_canonical_iso8601_utc(&input.created_at) {
+        return Err(sqlx::Error::Protocol(
+            "created_at must be a canonical ISO-8601 UTC timestamp.".into(),
+        ));
+    }
+
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let next_number: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(invoice_number), 0) + 1 FROM invoices")
+            .fetch_one(&mut *transaction)
+            .await?;
+
+    sqlx::query(
+        "INSERT INTO invoices (id, invoice_number, status, total, created_at, updated_at, completed_at)
+         VALUES (?, ?, 'draft', 0, ?, ?, NULL)",
+    )
+    .bind(&input.id)
+    .bind(next_number)
+    .bind(&input.created_at)
+    .bind(&input.created_at)
+    .execute(&mut *transaction)
+    .await?;
+
+    transaction.commit().await?;
+
+    Ok(InvoiceRecord {
+        id: input.id,
+        invoice_number: next_number,
+        status: "draft".to_string(),
+        total: 0,
+        created_at: input.created_at.clone(),
+        updated_at: input.created_at,
+        completed_at: None,
+        items: Vec::new(),
+    })
+}
+
+async fn fetch_invoice(
+    pool: &SqlitePool,
+    invoice_id: &str,
+) -> Result<Option<InvoiceRecord>, sqlx::Error> {
+    let mut transaction = pool.begin().await?;
+
+    let invoice_row = sqlx::query(
+        "SELECT id, invoice_number, status, total, created_at, updated_at, completed_at
+         FROM invoices WHERE id = ?",
+    )
+    .bind(invoice_id)
+    .fetch_optional(&mut *transaction)
+    .await?;
+
+    let Some(row) = invoice_row else {
+        transaction.commit().await?;
+        return Ok(None);
+    };
+
+    let item_rows = sqlx::query(
+        "SELECT id, invoice_id, product_id, unit_id, product_name, product_sku, product_brand,
+                unit_name, unit_price, quantity, subtotal, created_at
+         FROM invoice_items
+         WHERE invoice_id = ?
+         ORDER BY created_at ASC, id ASC",
+    )
+    .bind(invoice_id)
+    .fetch_all(&mut *transaction)
+    .await?;
+
+    transaction.commit().await?;
+
+    let mut items = Vec::with_capacity(item_rows.len());
+    for item_row in item_rows {
+        items.push(InvoiceItemRecord {
+            id: item_row.try_get("id")?,
+            invoice_id: item_row.try_get("invoice_id")?,
+            product_id: item_row.try_get("product_id")?,
+            unit_id: item_row.try_get("unit_id")?,
+            product_name: item_row.try_get("product_name")?,
+            product_sku: item_row.try_get("product_sku")?,
+            product_brand: item_row.try_get("product_brand")?,
+            unit_name: item_row.try_get("unit_name")?,
+            unit_price: item_row.try_get("unit_price")?,
+            quantity: item_row.try_get("quantity")?,
+            subtotal: item_row.try_get("subtotal")?,
+            created_at: item_row.try_get("created_at")?,
+        });
+    }
+
+    Ok(Some(InvoiceRecord {
+        id: row.try_get("id")?,
+        invoice_number: row.try_get("invoice_number")?,
+        status: row.try_get("status")?,
+        total: row.try_get("total")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+        completed_at: row.try_get("completed_at")?,
+        items,
+    }))
+}
+
+async fn persist_draft_items_and_total(
+    pool: &SqlitePool,
+    invoice: InvoiceRecord,
+) -> Result<(), sqlx::Error> {
+    if invoice.status != "draft" {
+        return Err(sqlx::Error::Protocol(
+            "Invoice status must be draft.".into(),
+        ));
+    }
+    validate_invoice_timestamps(&invoice)?;
+    let calculated_total = calculate_and_validate_total(&invoice.items, invoice.total)?;
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
+
+    let update_result = sqlx::query(
+        "UPDATE invoices
+         SET total = ?, updated_at = ?
+         WHERE id = ? AND status = 'draft'",
+    )
+    .bind(calculated_total)
+    .bind(&invoice.updated_at)
+    .bind(&invoice.id)
+    .execute(&mut *transaction)
+    .await?;
+
+    if update_result.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    sqlx::query("DELETE FROM invoice_items WHERE invoice_id = ?")
+        .bind(&invoice.id)
+        .execute(&mut *transaction)
+        .await?;
+
+    for item in &invoice.items {
+        validate_item_ownership_and_insert(&mut transaction, &invoice.id, item).await?;
+    }
+
+    transaction.commit().await?;
+    Ok(())
+}
+
+async fn persist_completed_invoice(
+    pool: &SqlitePool,
+    invoice: InvoiceRecord,
+) -> Result<(), sqlx::Error> {
+    if invoice.status != "completed" || invoice.completed_at.is_none() || invoice.items.is_empty() {
+        return Err(sqlx::Error::Protocol(
+            "Completing an invoice requires completed status, completed_at, and at least one item."
+                .into(),
+        ));
+    }
+    validate_invoice_timestamps(&invoice)?;
+    let calculated_total = calculate_and_validate_total(&invoice.items, invoice.total)?;
+    let completed_at = invoice.completed_at.as_deref().unwrap();
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
+
+    let update_result = sqlx::query(
+        "UPDATE invoices
+         SET status = 'completed', total = ?, updated_at = ?, completed_at = ?
+         WHERE id = ? AND status = 'draft'",
+    )
+    .bind(calculated_total)
+    .bind(&invoice.updated_at)
+    .bind(completed_at)
+    .bind(&invoice.id)
+    .execute(&mut *transaction)
+    .await?;
+
+    if update_result.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    sqlx::query("DELETE FROM invoice_items WHERE invoice_id = ?")
+        .bind(&invoice.id)
+        .execute(&mut *transaction)
+        .await?;
+
+    for item in &invoice.items {
+        validate_item_ownership_and_insert(&mut transaction, &invoice.id, item).await?;
+    }
+
+    transaction.commit().await?;
+    Ok(())
+}
+
+async fn persist_overwrite_completed(
+    pool: &SqlitePool,
+    invoice: InvoiceRecord,
+) -> Result<(), sqlx::Error> {
+    if invoice.status != "completed" || invoice.items.is_empty() {
+        return Err(sqlx::Error::Protocol(
+            "Overwriting a completed invoice requires completed status and at least one item."
+                .into(),
+        ));
+    }
+    validate_invoice_timestamps(&invoice)?;
+    let calculated_total = calculate_and_validate_total(&invoice.items, invoice.total)?;
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
+
+    let existing_row = sqlx::query(
+        "SELECT invoice_number, created_at, completed_at FROM invoices WHERE id = ? AND status = 'completed'",
+    )
+    .bind(&invoice.id)
+    .fetch_optional(&mut *transaction)
+    .await?;
+
+    let Some(row) = existing_row else {
+        return Err(sqlx::Error::RowNotFound);
+    };
+
+    let existing_number: i64 = row.try_get("invoice_number")?;
+    let existing_created_at: String = row.try_get("created_at")?;
+    let existing_completed_at: Option<String> = row.try_get("completed_at")?;
+
+    if existing_number != invoice.invoice_number
+        || existing_created_at != invoice.created_at
+        || existing_completed_at != invoice.completed_at
+    {
+        return Err(sqlx::Error::Protocol(
+            "Immutable fields (invoice_number, created_at, completed_at) cannot be modified during overwrite.".into(),
+        ));
+    }
+
+    let update_result = sqlx::query(
+        "UPDATE invoices
+         SET total = ?, updated_at = ?
+         WHERE id = ? AND status = 'completed'",
+    )
+    .bind(calculated_total)
+    .bind(&invoice.updated_at)
+    .bind(&invoice.id)
+    .execute(&mut *transaction)
+    .await?;
+
+    if update_result.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    sqlx::query("DELETE FROM invoice_items WHERE invoice_id = ?")
+        .bind(&invoice.id)
+        .execute(&mut *transaction)
+        .await?;
+
+    for item in &invoice.items {
+        validate_item_ownership_and_insert(&mut transaction, &invoice.id, item).await?;
+    }
+
+    transaction.commit().await?;
+    Ok(())
 }
 
 async fn save_product(
@@ -432,6 +971,14 @@ fn persistence_message(operation: &str, message: &str) -> ProductCommandError {
     ProductCommandError::Persistence {
         operation: operation.to_string(),
         message: message.to_string(),
+    }
+}
+
+fn invoice_persistence(operation: &str, error: impl std::fmt::Display) -> InvoiceCommandError {
+    eprintln! {"SQLite invoice {operation} failure: {error}"}
+    InvoiceCommandError::Persistence {
+        operation: operation.to_string(),
+        message: format! {"Database {operation} operation failed."},
     }
 }
 
