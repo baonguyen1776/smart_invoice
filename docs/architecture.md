@@ -711,6 +711,27 @@ The initial migration intentionally defers this table. Before `INV-005`, a new
 numbered migration must define its exact SQLite constraints and indexes without
 editing the initial migration.
 
+`INV-005` defines canonical alias/search normalization as: trim the input,
+apply Unicode NFKD normalization, lowercase using the Vietnamese locale, fold
+Vietnamese `đ` to `d`, remove combining marks, replace punctuation with spaces,
+then trim and collapse whitespace. Raw display/source values remain unchanged;
+`normalized_alias` stores only this canonical matching form. Rehydration rejects
+rows whose stored normalized value does not match the canonical form.
+
+Migration `0003_product_aliases.sql` prevents duplicate normalized aliases
+within one Product and source scope using separate partial unique indexes for
+global (`source_key IS NULL`) and source-scoped aliases. The same normalized
+alias may belong to different Products so search can surface ambiguity instead
+of silently selecting the wrong Product. Separate global and source-scoped
+lookup indexes support the matching order below, and a Product index supports
+catalog refreshes. Physical Product deletion remains restricted.
+
+The Product autocomplete index holds active Products, active Units, and their
+aliases in memory. Exact Product ID and case-insensitive exact SKU lookup runs
+before Fuse.js fuzzy matching. Product create/edit/deactivate and alias
+create/remove update the index only after the corresponding persistence write
+commits; search itself performs no database query per keystroke.
+
 For post-MVP AI import:
 
 - Document extraction separates header, line-item table, and footer.

@@ -1,4 +1,12 @@
-export type ProductRepositoryOperation = "create" | "get" | "update" | "deactivate" | "list";
+export type ProductRepositoryOperation =
+  | "create"
+  | "get"
+  | "update"
+  | "deactivate"
+  | "list"
+  | "create_alias"
+  | "remove_alias"
+  | "list_aliases";
 
 export interface ProductValidationFailure {
   readonly code: "validation";
@@ -15,6 +23,16 @@ export interface SkuConflict {
   readonly sku: string;
 }
 
+export interface ProductAliasConflict {
+  readonly code: "alias_conflict";
+  readonly alias: string;
+}
+
+export interface ProductSearchNotReady {
+  readonly code: "search_not_ready";
+  readonly message: string;
+}
+
 export interface ProductPersistenceFailure {
   readonly code: "persistence";
   readonly operation: ProductRepositoryOperation;
@@ -23,5 +41,13 @@ export interface ProductPersistenceFailure {
 
 export type ProductRepositoryWriteError = SkuConflict | ProductPersistenceFailure;
 
+export type ProductAliasRepositoryWriteError = ProductAliasConflict | ProductPersistenceFailure;
+
 export type ProductCatalogError =
   ProductValidationFailure | ProductNotFound | ProductRepositoryWriteError;
+
+export type ProductAliasCatalogError =
+  ProductValidationFailure | ProductNotFound | ProductAliasRepositoryWriteError;
+
+export type ProductSearchError =
+  ProductValidationFailure | ProductPersistenceFailure | ProductSearchNotReady;

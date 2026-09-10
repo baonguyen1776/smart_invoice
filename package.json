@@ -10,6 +10,7 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "benchmark:search": "vite build --config scripts/vite.search-benchmark.config.mjs && node .benchmark-dist/search-benchmark.js",
     "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -17,6 +18,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-sql": "^2.4.1",
+    "fuse.js": "^7.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

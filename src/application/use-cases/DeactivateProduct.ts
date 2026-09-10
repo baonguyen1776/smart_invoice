@@ -1,6 +1,7 @@
 import type { Product } from "../../domain/entities/Product";
 import type { ProductCatalogError } from "../errors/ProductCatalogError";
 import type { Clock } from "../ports/Clock";
+import type { ProductSearchIndex } from "../ports/ProductSearchIndex";
 import type { ProductRepository } from "../repositories/ProductRepository";
 import { err, ok, type Result } from "../shared/Result";
 import { isUuidV4 } from "../shared/Uuid";
@@ -14,6 +15,7 @@ export class DeactivateProduct {
   constructor(
     private readonly repository: ProductRepository,
     private readonly clock: Clock,
+    private readonly searchIndex?: ProductSearchIndex,
   ) {}
 
   async execute(input: DeactivateProductInput): Promise<Result<Product, ProductCatalogError>> {
@@ -45,6 +47,9 @@ export class DeactivateProduct {
 
     const persisted = await this.repository.deactivate(product);
 
-    return persisted.ok ? ok(product) : err(persisted.error);
+    if (!persisted.ok) return err(persisted.error);
+
+    this.searchIndex?.removeProduct(product.id);
+    return ok(product);
   }
 }
