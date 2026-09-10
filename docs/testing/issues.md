@@ -56,6 +56,22 @@ TDD covered missing Product factories (6 initial failures), duplicate Unit IDs (
 
 Manual Tauri verification at 1366×768 and a complete keyboard-only pass remain to be recorded before marking the issue Done.
 
+## #15 — SQLite Invoice repository and draft persistence
+
+[Issue #15](https://github.com/baonguyen1776/smart_invoice/issues/15) — implementation checks passed on 2026-09-10.
+
+- Persists UC-01 Invoice draft creation, atomic sequential invoice number assignment (`MAX + 1`), semantic item updates, completion, and confirmed completed overwrites.
+- All write operations execute within `BEGIN IMMEDIATE` transactions, ensuring all-or-nothing atomicity and ACID compliance.
+- Recalculates and validates invoice totals from item subtotals using checked arithmetic; rejects arithmetic overflow, safe integer limit violations (> 9,007,199,254,740,991), and mismatched totals with complete rollback.
+- Reads invoice header and items within a single read transaction in `fetch_invoice` to guarantee snapshot consistency.
+- Validates draft UUID v4 identity and canonical ISO-8601 UTC timestamps before committing any draft rows.
+- Enforces Product–Unit ownership for every InvoiceItem during write transactions with complete rollback on mismatch, while preserving inactive catalog records for historical consistency.
+- Historical InvoiceItem display data is read strictly from snapshot columns, preserved even when catalog Product/Unit records are subsequently modified.
+- TypeScript repository adapter (`SQLiteInvoiceRepository`) cleanly implements the Application `InvoiceRepository` port, mapping infrastructure errors to `InvoicePersistenceFailure` without leaking database internals.
+- Verification:
+  - Frontend: 112 tests across 10 files passed; typecheck, lint, build, format, and diff checks passed.
+  - Rust: 27 tests passed; fmt and Clippy (all targets, warnings denied) passed.
+
 ## Run checks
 
 From the repository root; native smoke requires a graphical desktop, creates an isolated profile and times out after 30 seconds per process.

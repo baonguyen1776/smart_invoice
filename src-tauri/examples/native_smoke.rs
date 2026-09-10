@@ -32,6 +32,11 @@ fn main() {
             database::update_product,
             database::deactivate_product,
             database::list_products,
+            database::create_invoice_draft,
+            database::get_invoice,
+            database::save_invoice_draft,
+            database::complete_invoice,
+            database::overwrite_completed_invoice,
             smoke_report,
         ])
         .setup(move |app| {
