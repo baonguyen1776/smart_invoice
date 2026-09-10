@@ -958,3 +958,132 @@ fn allows_inactive_product_and_unit_ownership_for_historical_items() {
         assert_eq!(loaded.total, 30_000);
     });
 }
+
+fn product_alias(
+    id: &str,
+    product_id: &str,
+    alias: &str,
+    normalized_alias: &str,
+    source_key: Option<&str>,
+) -> ProductAliasRecord {
+    ProductAliasRecord {
+        id: id.to_string(),
+        product_id: product_id.to_string(),
+        alias: alias.to_string(),
+        normalized_alias: normalized_alias.to_string(),
+        source_key: source_key.map(str::to_string),
+        source_name_raw: source_key.map(|_| "Nhà phân phối Miền Nam".to_string()),
+        unit_name: Some("Thùng".to_string()),
+        created_at: NOW.to_string(),
+    }
+}
+
+#[test]
+fn product_alias_migration_enforces_scope_and_preserves_ambiguity() {
+    tauri::async_runtime::block_on(async {
+        const ALIAS_ID: &str = "55555555-5555-4555-8555-555555555555";
+        const SECOND_ALIAS_ID: &str = "66666666-6666-4666-8666-666666666666";
+        const THIRD_ALIAS_ID: &str = "77777777-7777-4777-8777-777777777777";
+        const FOURTH_ALIAS_ID: &str = "88888888-8888-4888-8888-888888888888";
+
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true)
+            .await
+            .unwrap();
+        save_product(
+            &pool,
+            product(SECOND_PRODUCT_ID, OTHER_UNIT_ID, None),
+            "create",
+            true,
+        )
+        .await
+        .unwrap();
+
+        insert_product_alias(
+            &pool,
+            product_alias(ALIAS_ID, PRODUCT_ID, "Cà phê sữa", "ca phe sua", None),
+        )
+        .await
+        .unwrap();
+
+        let duplicate = insert_product_alias(
+            &pool,
+            product_alias(
+                SECOND_ALIAS_ID,
+                PRODUCT_ID,
+                "CA PHE SUA",
+                "ca phe sua",
+                None,
+            ),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            duplicate,
+            ProductCommandError::AliasConflict { .. }
+        ));
+
+        // A scoped mapping is distinct from a global alias, and the same global
+        // phrase can remain ambiguous across separate Products.
+        insert_product_alias(
+            &pool,
+            product_alias(
+                SECOND_ALIAS_ID,
+                PRODUCT_ID,
+                "Cà phê sữa",
+                "ca phe sua",
+                Some("tax:0123456789"),
+            ),
+        )
+        .await
+        .unwrap();
+        insert_product_alias(
+            &pool,
+            product_alias(
+                THIRD_ALIAS_ID,
+                SECOND_PRODUCT_ID,
+                "Cà phê sữa",
+                "ca phe sua",
+                None,
+            ),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(fetch_active_product_aliases(&pool).await.unwrap().len(), 3);
+        set_product_inactive(&pool, PRODUCT_ID, NOW).await.unwrap();
+        let active_aliases = fetch_active_product_aliases(&pool).await.unwrap();
+        assert_eq!(active_aliases.len(), 1);
+        assert_eq!(active_aliases[0].id, THIRD_ALIAS_ID);
+
+        delete_product_alias(&pool, THIRD_ALIAS_ID).await.unwrap();
+        assert!(fetch_active_product_aliases(&pool).await.unwrap().is_empty());
+
+        let invalid = insert_product_alias(
+            &pool,
+            product_alias(
+                FOURTH_ALIAS_ID,
+                SECOND_PRODUCT_ID,
+                " padded ",
+                "padded",
+                None,
+            ),
+        )
+        .await;
+        assert!(invalid.is_err());
+
+        let indexes: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'product_aliases'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert!(indexes.iter().any(|name| name == "product_aliases_product_idx"));
+        assert!(indexes
+            .iter()
+            .any(|name| name == "product_aliases_global_lookup_idx"));
+        assert!(indexes
+            .iter()
+            .any(|name| name == "product_aliases_scoped_lookup_idx"));
+    });
+}

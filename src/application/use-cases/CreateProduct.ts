@@ -3,6 +3,7 @@ import { Unit } from "../../domain/entities/Unit";
 import type { ProductCatalogError } from "../errors/ProductCatalogError";
 import type { Clock } from "../ports/Clock";
 import type { IdGenerator } from "../ports/IdGenerator";
+import type { ProductSearchIndex } from "../ports/ProductSearchIndex";
 import type { ProductRepository } from "../repositories/ProductRepository";
 import { err, ok, type Result } from "../shared/Result";
 import { mapDomainValidation } from "./ProductUseCaseSupport";
@@ -25,6 +26,7 @@ export class CreateProduct {
     private readonly repository: ProductRepository,
     private readonly idGenerator: IdGenerator,
     private readonly clock: Clock,
+    private readonly searchIndex?: ProductSearchIndex,
   ) {}
 
   async execute(input: CreateProductInput): Promise<Result<Product, ProductCatalogError>> {
@@ -66,6 +68,9 @@ export class CreateProduct {
 
     const persisted = await this.repository.create(product);
 
-    return persisted.ok ? ok(product) : err(persisted.error);
+    if (!persisted.ok) return err(persisted.error);
+
+    this.searchIndex?.upsertProduct(product);
+    return ok(product);
   }
 }

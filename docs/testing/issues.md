@@ -72,12 +72,52 @@ Manual Tauri verification at 1366×768 and a complete keyboard-only pass remain 
   - Frontend: 112 tests across 10 files passed; typecheck, lint, build, format, and diff checks passed.
   - Rust: 27 tests passed; fmt and Clippy (all targets, warnings denied) passed.
 
+## #16 — ProductAlias persistence and Fuse.js catalog search
+
+[Issue #16](https://github.com/baonguyen1776/smart_invoice/issues/16) — implementation checks passed on 2026-09-10.
+
+- Migration `0003_product_aliases.sql` adds the documented ProductAlias fields,
+  Product foreign-key restriction, per-Product/per-source uniqueness, and
+  global/source-scoped lookup indexes without modifying earlier migrations.
+- Canonical search normalization is NFKD, Vietnamese-locale lowercase, `đ`
+  folding, combining-mark removal, punctuation-to-space conversion, trimming,
+  and whitespace collapse. Tests cover Vietnamese aliases and persistence
+  rehydration integrity.
+- The application loads active Products and aliases once, checks exact Product
+  ID/SKU before Fuse.js fuzzy candidates, and never queries repositories per
+  keystroke after readiness. Candidates retain Product SKU/brand/category and
+  active Unit context so duplicate names remain distinguishable.
+- Product and alias use cases refresh the in-memory index only after committed
+  create/edit/deactivate/create-alias/remove-alias writes. Inactive Products are
+  excluded from exact lookup, fuzzy results, and new-invoice selection.
+- Fuse.js `7.5.0` is the documented/approved search implementation; no other
+  dependency was introduced.
+- Frontend: 124 tests across 14 files passed; typecheck, lint, production build,
+  format, and diff checks passed.
+- Rust: 28 tests passed with 1 opt-in benchmark ignored; migration/alias tests,
+  fmt, and Clippy (all targets, warnings denied) passed.
+
+Production-bundled search benchmark: macOS 26.6.2, Node 24.19.0. The fixture has
+10,000 active Products, 50,000 active Units, and 10,000 aliases. Fixture/entity
+construction is excluded; `index_load` measures replacement and Fuse index
+construction from ready Domain objects. One warm-up is excluded. P95 uses the
+nearest-rank sample.
+
+| Operation | Samples | Median ms | P95 ms | Max ms | Requirement |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Index load | 20 | 57.414 | 60.928 | 61.372 | ≤500 ms P95, ≤1,000 ms max |
+| Autocomplete | 100 | 48.822 | 50.654 | 53.664 | ≤100 ms P95, ≤300 ms max |
+
+Both measured paths meet NFR-PERF-003 and NFR-PERF-004 on this environment.
+Cross-platform/minimum-spec measurements remain unverified.
+
 ## Run checks
 
 From the repository root; native smoke requires a graphical desktop, creates an isolated profile and times out after 30 seconds per process.
 
 ```sh
 npm run typecheck && npm run lint && npm run test && npm run build && npm run format:check
+npm run benchmark:search
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml

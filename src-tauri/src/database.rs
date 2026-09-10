@@ -47,6 +47,19 @@ pub struct ProductRecord {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProductAliasRecord {
+    pub id: String,
+    pub product_id: String,
+    pub alias: String,
+    pub normalized_alias: String,
+    pub source_key: Option<String>,
+    pub source_name_raw: Option<String>,
+    pub unit_name: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InvoiceItemRecord {
     pub id: String,
     pub invoice_id: String,
@@ -93,6 +106,7 @@ pub enum InvoiceCommandError {
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum ProductCommandError {
     SkuConflict { sku: String },
+    AliasConflict { alias: String },
     Persistence { operation: String, message: String },
 }
 
@@ -179,6 +193,33 @@ pub async fn list_products(
     fetch_products(&state.0, activity)
         .await
         .map_err(|error| persistence("list", error))
+}
+
+#[tauri::command]
+pub async fn create_product_alias(
+    state: State<'_, DatabaseState>,
+    alias: ProductAliasRecord,
+) -> Result<(), ProductCommandError> {
+    insert_product_alias(&state.0, alias).await
+}
+
+#[tauri::command]
+pub async fn remove_product_alias(
+    state: State<'_, DatabaseState>,
+    alias_id: String,
+) -> Result<(), ProductCommandError> {
+    delete_product_alias(&state.0, &alias_id)
+        .await
+        .map_err(|error| persistence("remove_alias", error))
+}
+
+#[tauri::command]
+pub async fn list_active_product_aliases(
+    state: State<'_, DatabaseState>,
+) -> Result<Vec<ProductAliasRecord>, ProductCommandError> {
+    fetch_active_product_aliases(&state.0)
+        .await
+        .map_err(|error| persistence("list_aliases", error))
 }
 
 #[tauri::command]
@@ -945,6 +986,128 @@ async fn set_product_inactive(
         return Err(sqlx::Error::RowNotFound);
     }
     Ok(())
+}
+
+fn validate_product_alias(alias: &ProductAliasRecord) -> Result<(), ProductCommandError> {
+    let optional_values_are_valid = [&alias.source_key, &alias.source_name_raw, &alias.unit_name]
+        .into_iter()
+        .all(|value| {
+            value
+                .as_deref()
+                .is_none_or(|text| !text.trim().is_empty() && text == text.trim())
+        });
+
+    if !is_uuid_v4(&alias.id)
+        || !is_uuid_v4(&alias.product_id)
+        || alias.alias.trim().is_empty()
+        || alias.alias != alias.alias.trim()
+        || alias.normalized_alias.trim().is_empty()
+        || alias.normalized_alias != alias.normalized_alias.trim()
+        || !optional_values_are_valid
+        || (alias.source_key.is_none() && alias.source_name_raw.is_some())
+        || !is_canonical_iso8601_utc(&alias.created_at)
+    {
+        return Err(persistence_message(
+            "create_alias",
+            "Invalid ProductAlias contract.",
+        ));
+    }
+
+    Ok(())
+}
+
+async fn insert_product_alias(
+    pool: &SqlitePool,
+    alias: ProductAliasRecord,
+) -> Result<(), ProductCommandError> {
+    validate_product_alias(&alias)?;
+    let result = sqlx::query(
+        "INSERT INTO product_aliases
+         (id, product_id, alias, normalized_alias, source_key, source_name_raw, unit_name, created_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM products WHERE id = ? AND is_active = 1)",
+    )
+    .bind(&alias.id)
+    .bind(&alias.product_id)
+    .bind(&alias.alias)
+    .bind(&alias.normalized_alias)
+    .bind(&alias.source_key)
+    .bind(&alias.source_name_raw)
+    .bind(&alias.unit_name)
+    .bind(&alias.created_at)
+    .bind(&alias.product_id)
+    .execute(pool)
+    .await
+    .map_err(|error| map_alias_write_error(&alias.alias, error))?;
+
+    if result.rows_affected() != 1 {
+        return Err(persistence_message(
+            "create_alias",
+            "ProductAlias requires an active Product.",
+        ));
+    }
+    Ok(())
+}
+
+async fn delete_product_alias(pool: &SqlitePool, alias_id: &str) -> Result<(), sqlx::Error> {
+    if !is_uuid_v4(alias_id) {
+        return Err(sqlx::Error::Protocol(
+            "alias_id must be a valid UUID v4.".into(),
+        ));
+    }
+    let result = sqlx::query("DELETE FROM product_aliases WHERE id = ?")
+        .bind(alias_id)
+        .execute(pool)
+        .await?;
+    if result.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    Ok(())
+}
+
+async fn fetch_active_product_aliases(
+    pool: &SqlitePool,
+) -> Result<Vec<ProductAliasRecord>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT a.id, a.product_id, a.alias, a.normalized_alias, a.source_key,
+                a.source_name_raw, a.unit_name, a.created_at
+         FROM product_aliases a
+         INNER JOIN products p ON p.id = a.product_id
+         WHERE p.is_active = 1
+         ORDER BY a.created_at, a.id",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(ProductAliasRecord {
+                id: row.try_get("id")?,
+                product_id: row.try_get("product_id")?,
+                alias: row.try_get("alias")?,
+                normalized_alias: row.try_get("normalized_alias")?,
+                source_key: row.try_get("source_key")?,
+                source_name_raw: row.try_get("source_name_raw")?,
+                unit_name: row.try_get("unit_name")?,
+                created_at: row.try_get("created_at")?,
+            })
+        })
+        .collect()
+}
+
+fn map_alias_write_error(alias: &str, error: sqlx::Error) -> ProductCommandError {
+    if let sqlx::Error::Database(database_error) = &error {
+        if database_error.is_unique_violation()
+            && database_error
+                .message()
+                .contains("product_aliases.product_id")
+        {
+            return ProductCommandError::AliasConflict {
+                alias: alias.to_string(),
+            };
+        }
+    }
+    persistence("create_alias", error)
 }
 
 fn map_write_error(operation: &str, sku: Option<&str>, error: sqlx::Error) -> ProductCommandError {
