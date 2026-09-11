@@ -24,6 +24,7 @@ interface InvoiceItemRecord {
   readonly unitPrice: number;
   readonly quantity: number;
   readonly subtotal: number;
+  readonly discountBasisPoints: number;
   readonly createdAt: string;
 }
 
@@ -70,6 +71,20 @@ export class SQLiteInvoiceRepository implements InvoiceRepository {
     }
   }
 
+  // 2b. Liệt kê hóa đơn theo trạng thái
+  async listInvoices(
+    status?: InvoiceStatus,
+  ): Promise<Result<readonly Invoice[], InvoicePersistenceFailure>> {
+    try {
+      const records = (await this.commandInvoker("list_invoices", {
+        status: status ?? null,
+      })) as InvoiceRecord[];
+      return ok(records.map(rehydrateInvoice));
+    } catch {
+      return err(mapPersistenceFailure("list"));
+    }
+  }
+
   // 3. Lưu bản nháp
   async saveDraft(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>> {
     return this.write("save_invoice_draft", "save_draft", invoice);
@@ -83,6 +98,16 @@ export class SQLiteInvoiceRepository implements InvoiceRepository {
   // 5. Ghi đè hóa đơn đã chốt
   async overwriteCompleted(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>> {
     return this.write("overwrite_completed_invoice", "overwrite_completed", invoice);
+  }
+
+  // 6. Xóa bản nháp
+  async deleteDraft(invoiceId: string): Promise<Result<void, InvoicePersistenceFailure>> {
+    try {
+      await this.commandInvoker("delete_invoice_draft", { id: invoiceId });
+      return ok(undefined);
+    } catch {
+      return err(mapPersistenceFailure("delete_draft"));
+    }
   }
 
   private async write(
@@ -123,6 +148,7 @@ function toRecord(invoice: Invoice): InvoiceRecord {
         unitPrice: itemState.unitPrice,
         quantity: itemState.quantity,
         subtotal: itemState.subtotal,
+        discountBasisPoints: itemState.discountBasisPoints,
         createdAt: itemState.createdAt,
       };
     }),
@@ -145,6 +171,7 @@ function rehydrateInvoice(record: InvoiceRecord): Invoice {
         unitPrice: item.unitPrice,
         quantity: item.quantity,
         subtotal: item.subtotal,
+        discountBasisPoints: item.discountBasisPoints,
         createdAt: item.createdAt,
       }),
     ),

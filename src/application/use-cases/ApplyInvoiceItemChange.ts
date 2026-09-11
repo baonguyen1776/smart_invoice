@@ -1,4 +1,4 @@
-import { InvoiceItem } from "../../domain/entities/InvoiceItem";
+import { InvoiceItem, type UpdateInvoiceItemInput } from "../../domain/entities/InvoiceItem";
 import type { Invoice } from "../../domain/entities/Invoice";
 import type { InvoiceError } from "../errors/InvoiceError";
 import type { Clock } from "../ports/Clock";
@@ -9,6 +9,8 @@ import { loadInvoice, mapInvoiceDomainError } from "./InvoiceUseCaseSupport";
 
 interface AddItemChange {
   readonly type: "add";
+  readonly itemId?: string;
+  readonly discountBasisPoints?: number;
   readonly productId: string;
   readonly unitId: string;
   readonly productName: string;
@@ -37,7 +39,7 @@ interface UpdatePriceChange {
 }
 
 export type InvoiceItemChange =
-  AddItemChange | RemoveItemChange | UpdateQuantityChange | UpdatePriceChange;
+  AddItemChange | RemoveItemChange | UpdateQuantityChange | UpdatePriceChange | { readonly type: "update"; readonly itemId: string; readonly values: UpdateInvoiceItemInput };
 
 export interface ApplyInvoiceItemChangeInput {
   readonly invoiceId: string;
@@ -84,7 +86,8 @@ export class ApplyInvoiceItemChange {
       return [
         ...invoice.items,
         InvoiceItem.create({
-          id: this.idGenerator.generate(),
+          id: change.itemId ?? this.idGenerator.generate(),
+          discountBasisPoints: change.discountBasisPoints,
           invoiceId: invoice.id,
           productId: change.productId,
           unitId: change.unitId,
@@ -106,6 +109,7 @@ export class ApplyInvoiceItemChange {
 
     return invoice.items.map((item, itemIndex) => {
       if (itemIndex !== index) return item;
+      if (change.type === "update") return item.update(change.values);
       return change.type === "update_quantity"
         ? item.update({ quantity: change.quantity })
         : item.update({ unitPrice: change.unitPrice });

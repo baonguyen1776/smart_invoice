@@ -1,5 +1,11 @@
 export type InvoiceRepositoryOperation =
-  "create_draft" | "get" | "save_draft" | "complete" | "overwrite_completed";
+  | "create_draft"
+  | "get"
+  | "save_draft"
+  | "complete"
+  | "overwrite_completed"
+  | "list"
+  | "delete_draft";
 
 export interface InvoiceValidationFailure {
   readonly code: "validation";

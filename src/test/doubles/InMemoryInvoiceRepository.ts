@@ -46,6 +46,17 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     return failure === null ? ok(this.invoices.get(invoiceId) ?? null) : err(failure);
   }
 
+  async listInvoices(
+    status?: Invoice["status"],
+  ): Promise<Result<readonly Invoice[], InvoicePersistenceFailure>> {
+    const failure = this.takeFailure("list");
+    if (failure !== null) return err(failure);
+    const all = Array.from(this.invoices.values());
+    const filtered = status ? all.filter((inv) => inv.status === status) : all;
+    filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return ok(filtered);
+  }
+
   async saveDraft(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>> {
     this.saveDraftCalls.push(invoice);
     return this.persist("save_draft", invoice);
@@ -59,6 +70,13 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
   async overwriteCompleted(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>> {
     this.overwriteCompletedCalls.push(invoice);
     return this.persist("overwrite_completed", invoice);
+  }
+
+  async deleteDraft(invoiceId: string): Promise<Result<void, InvoicePersistenceFailure>> {
+    const failure = this.takeFailure("delete_draft");
+    if (failure !== null) return err(failure);
+    this.invoices.delete(invoiceId);
+    return ok(undefined);
   }
 
   private persist(
