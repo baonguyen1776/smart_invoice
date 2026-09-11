@@ -130,3 +130,19 @@ flowchart TD
 ```
 
 ---
+
+
+## Spreadsheet detail entry (approved September 11, 2026)
+
+The detail grid contains Stt, Tên hàng hóa, Đvt, Số lượng, Đơn giá, Thành tiền,
+CK (%), Tiền CK, and Thanh toán. Begin with one editable blank row; append one
+new trailing row when that row is first entered, without a fixed row limit.
+Unfinished rows remain UI input state until a valid catalog selection and valid
+amounts can be saved. They must block completion and must never be persisted as
+invalid InvoiceItems. Product autocomplete and unit selection occur inside cells.
+Enter/Tab traverse editable cells; derived money columns are read-only. The
+sticky totals row includes all filled lines, irrespective of table filtering.
+
+Line CK uses the precision, rounding, persistence, and net-total contract in
+`docs/architecture.md` §19.6. Deleting and undoing a line retains its CK. The
+right summary keeps its layout and displays the saved invoice total after CK.
