@@ -40,6 +40,8 @@ fn main() {
             database::save_invoice_draft,
             database::complete_invoice,
             database::overwrite_completed_invoice,
+            database::list_invoices,
+            database::delete_invoice_draft,
             smoke_report,
         ])
         .setup(move |app| {

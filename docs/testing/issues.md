@@ -119,6 +119,22 @@ nearest-rank sample.
 - Frontend: 132 tests across 15 files passed; typecheck, lint, production build, format, and diff checks passed.
 - Rust: 28 unit/regression tests passed; fmt and Clippy (all targets, warnings denied) passed.
 
+## #18 — Draft auto-save and crash recovery
+
+[Issue #18](https://github.com/baonguyen1776/smart_invoice/issues/18) — implementation checks passed on 2026-09-11.
+
+- **Crash Recovery & Cold-start Resume**: Introduced Application use case `RestoreInvoiceDraft` which checks the active session draft ID or restores the latest uncompleted draft (`status = 'draft'` sorted by `updated_at DESC, invoice_number DESC`) from SQLite. When reopening the application or recovering from an abnormal termination, all line items, quantities, custom VIP unit prices, discounts, and customer contact notes are restored with zero data loss.
+- **Atomic Semantic Auto-save**: Every item addition, quantity update, VIP unit price override, discount update, removal, and undo commits within an atomic `BEGIN IMMEDIATE` database transaction. UI tracks pending promises, shows an actionable "Đang lưu..." indicator, and never reports success until the database transaction has committed.
+- **Clean Failure Isolation**: Write failures roll back completely to the last valid snapshot and display actionable localized error messages ("Chưa lưu được thay đổi...", "Giá trị hoặc tổng tiền vượt giới hạn...") without exposing raw SQLite internals.
+- **Zero-Warning Code Quality**: Resolved React 19 hook cascading render warnings by rehydrating customer metadata during draft initialization and triggering draft list updates on demand.
+- **NFR-PERF-007 Benchmark**: Measured draft persistence for 10, 50, and 100 items using a file-backed SQLite database in release profile over 100 samples per tier:
+
+| Operation | Items | Samples | Median ms | P95 ms | Max ms | Requirement (NFR-PERF-007) |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Save Draft Items | 10 | 100 | 0.474 | 0.698 | 0.933 | ≤50 ms |
+| Save Draft Items | 50 | 100 | 1.026 | 1.229 | 1.435 | ≤150 ms |
+| Save Draft Items | 100 | 100 | 1.814 | 1.944 | 2.209 | ≤300 ms P95 |
+
 ## Run checks
 
 From the repository root; native smoke requires a graphical desktop, creates an isolated profile and times out after 30 seconds per process.
@@ -130,6 +146,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml --release --lib catalog_benchmark -- --ignored --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml --release --lib invoice_draft_benchmark -- --ignored --nocapture
 cargo build --manifest-path src-tauri/Cargo.toml --release --example native_smoke --features tauri/custom-protocol
 node scripts/native-smoke.mjs
 git diff --check

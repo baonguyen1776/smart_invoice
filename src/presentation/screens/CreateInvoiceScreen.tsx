@@ -7,6 +7,7 @@ import type {
 import type { CreateInvoiceDraft } from "../../application/use-cases/CreateInvoiceDraft";
 import type { DeleteInvoiceDraft } from "../../application/use-cases/DeleteInvoiceDraft";
 import type { ListInvoices } from "../../application/use-cases/ListInvoices";
+import type { RestoreInvoiceDraft } from "../../application/use-cases/RestoreInvoiceDraft";
 import type { SearchProducts } from "../../application/use-cases/SearchProducts";
 import type { Invoice } from "../../domain/entities/Invoice";
 import type { InvoiceItem } from "../../domain/entities/InvoiceItem";
@@ -16,6 +17,7 @@ import "./CreateInvoiceScreen.css";
 
 export interface InvoiceScreenActions {
   readonly createInvoiceDraft: Pick<CreateInvoiceDraft, "execute">;
+  readonly restoreInvoiceDraft?: Pick<RestoreInvoiceDraft, "execute">;
   readonly applyInvoiceItemChange: Pick<ApplyInvoiceItemChange, "execute">;
   readonly searchProducts: Pick<SearchProducts, "execute">;
   readonly listInvoices?: Pick<ListInvoices, "execute">;
@@ -55,84 +57,30 @@ export function CreateInvoiceScreen({
 
   const [loadAttempt, setLoadAttempt] = useState(0);
   const draftRequest = useRef<{
-    action: InvoiceScreenActions["createInvoiceDraft"];
+    action:
+      InvoiceScreenActions["createInvoiceDraft"] | InvoiceScreenActions["restoreInvoiceDraft"];
     attempt: number;
     promise: ReturnType<InvoiceScreenActions["createInvoiceDraft"]["execute"]>;
   } | null>(null);
 
-  useEffect(() => {
-    let isCancelled = false;
-    // Reuse the in-flight request during StrictMode's effect replay.
-    if (
-      draftRequest.current?.action !== actions.createInvoiceDraft ||
-      draftRequest.current.attempt !== loadAttempt
-    ) {
-      draftRequest.current = {
-        action: actions.createInvoiceDraft,
-        attempt: loadAttempt,
-        promise: actions.createInvoiceDraft.execute(),
-      };
-    }
-    const request = draftRequest.current.promise;
-    async function initializeDraft() {
-      try {
-        const result = await request;
-        if (isCancelled) return;
-        if (result.ok) setInvoice(result.value);
-        else setErrorMessage("Không thể mở hóa đơn nháp. Vui lòng thử lại.");
-      } catch {
-        if (!isCancelled) setErrorMessage("Không thể mở hóa đơn nháp. Vui lòng thử lại.");
-      } finally {
-        if (!isCancelled) setIsLoading(false);
-      }
-    }
-    void initializeDraft();
-    return () => {
-      isCancelled = true;
-    };
-  }, [actions.createInvoiceDraft, loadAttempt]);
-  useEffect(() => {
-    if (!isLoading) document.querySelector<HTMLInputElement>('[data-product-input="true"]')?.focus();
-  }, [isLoading]);
-
-  useEffect(() => {
-    if (lastRemoved) undoButtonRef.current?.focus();
-  }, [lastRemoved]);
-
-  useEffect(() => {
-    if (!invoice?.id) return;
+  const loadCustomerForInvoice = useCallback((invoiceId: string) => {
     try {
-      localStorage.setItem("smart_invoice_active_draft_id", invoice.id);
-      const saved = localStorage.getItem(`smart_invoice_customer_${invoice.id}`);
+      localStorage.setItem("smart_invoice_active_draft_id", invoiceId);
+      const saved = localStorage.getItem(`smart_invoice_customer_${invoiceId}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.name) setCustomerName(parsed.name);
-        if (parsed.phone) setCustomerPhone(parsed.phone);
-        if (parsed.note) setCustomerNote(parsed.note);
+        setCustomerName(parsed.name || "");
+        setCustomerPhone(parsed.phone || "");
+        setCustomerNote(parsed.note || "");
+        return;
       }
     } catch {
       // ignore
     }
-  }, [invoice?.id]);
-
-  function handleCustomerChange(field: "name" | "phone" | "note", value: string) {
-    if (field === "name") setCustomerName(value);
-    else if (field === "phone") setCustomerPhone(value);
-    else if (field === "note") setCustomerNote(value);
-
-    if (invoice?.id) {
-      try {
-        const data = {
-          name: field === "name" ? value : customerName,
-          phone: field === "phone" ? value : customerPhone,
-          note: field === "note" ? value : customerNote,
-        };
-        localStorage.setItem(`smart_invoice_customer_${invoice.id}`, JSON.stringify(data));
-      } catch {
-        // ignore
-      }
-    }
-  }
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerNote("");
+  }, []);
 
   const refreshDrafts = useCallback(async () => {
     if (!actions.listInvoices) return;
@@ -147,8 +95,93 @@ export function CreateInvoiceScreen({
   }, [actions.listInvoices]);
 
   useEffect(() => {
-    void refreshDrafts();
-  }, [refreshDrafts]);
+    let isCancelled = false;
+    const activeAction = actions.restoreInvoiceDraft ?? actions.createInvoiceDraft;
+
+    // Reuse the in-flight request during StrictMode's effect replay.
+    if (
+      draftRequest.current?.action !== activeAction ||
+      draftRequest.current.attempt !== loadAttempt
+    ) {
+      const preferredId = (() => {
+        try {
+          return localStorage.getItem("smart_invoice_active_draft_id") || undefined;
+        } catch {
+          return undefined;
+        }
+      })();
+
+      const promise = actions.restoreInvoiceDraft
+        ? actions.restoreInvoiceDraft.execute({ preferredInvoiceId: preferredId })
+        : actions.createInvoiceDraft.execute();
+
+      draftRequest.current = {
+        action: activeAction,
+        attempt: loadAttempt,
+        promise,
+      };
+    }
+    const request = draftRequest.current.promise;
+    async function initializeDraft() {
+      try {
+        const result = await request;
+        if (isCancelled) return;
+        if (result.ok) {
+          setInvoice(result.value);
+          loadCustomerForInvoice(result.value.id);
+          void refreshDrafts();
+        } else {
+          setErrorMessage("Không thể mở hóa đơn nháp. Vui lòng thử lại.");
+        }
+      } catch {
+        if (!isCancelled) setErrorMessage("Không thể mở hóa đơn nháp. Vui lòng thử lại.");
+      } finally {
+        if (!isCancelled) setIsLoading(false);
+      }
+    }
+    void initializeDraft();
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    actions.createInvoiceDraft,
+    actions.restoreInvoiceDraft,
+    loadAttempt,
+    loadCustomerForInvoice,
+    refreshDrafts,
+  ]);
+
+  useEffect(() => {
+    if (!isLoading)
+      document.querySelector<HTMLInputElement>('[data-product-input="true"]')?.focus();
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (lastRemoved) undoButtonRef.current?.focus();
+  }, [lastRemoved]);
+
+  function handleCustomerChange(field: "name" | "phone" | "note", value: string) {
+    const nextName = field === "name" ? value : customerName;
+    const nextPhone = field === "phone" ? value : customerPhone;
+    const nextNote = field === "note" ? value : customerNote;
+
+    if (field === "name") setCustomerName(value);
+    else if (field === "phone") setCustomerPhone(value);
+    else if (field === "note") setCustomerNote(value);
+
+    if (invoice?.id) {
+      try {
+        const data = {
+          name: nextName,
+          phone: nextPhone,
+          note: nextNote,
+        };
+        localStorage.setItem(`smart_invoice_customer_${invoice.id}`, JSON.stringify(data));
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   function handleSelectDraft(selected: Invoice) {
     if (selected.id === invoice?.id) {
@@ -163,6 +196,7 @@ export function CreateInvoiceScreen({
       return;
     }
     setInvoice(selected);
+    loadCustomerForInvoice(selected.id);
     setIsDraftsModalOpen(false);
     setNoticeMessage(`Đã mở bản nháp #${String(selected.invoiceNumber).padStart(6, "0")}`);
   }
@@ -175,9 +209,7 @@ export function CreateInvoiceScreen({
       const result = await actions.createInvoiceDraft.execute();
       if (result.ok) {
         setInvoice(result.value);
-        setCustomerName("");
-        setCustomerPhone("");
-        setCustomerNote("");
+        loadCustomerForInvoice(result.value.id);
         setNoticeMessage(
           `Đã tạo bản nháp mới #${String(result.value.invoiceNumber).padStart(6, "0")}`,
         );
@@ -210,9 +242,8 @@ export function CreateInvoiceScreen({
       const remaining = drafts.filter((d) => d.id !== target.id);
       if (remaining.length > 0) {
         setInvoice(remaining[0]);
-        setNoticeMessage(
-          `Đã xóa bản nháp #${String(target.invoiceNumber).padStart(6, "0")}`,
-        );
+        loadCustomerForInvoice(remaining[0].id);
+        setNoticeMessage(`Đã xóa bản nháp #${String(target.invoiceNumber).padStart(6, "0")}`);
       } else {
         void handleCreateNewDraft();
       }

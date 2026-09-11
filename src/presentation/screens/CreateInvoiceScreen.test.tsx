@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { err, ok } from "../../application/shared/Result";
 import { ApplyInvoiceItemChange } from "../../application/use-cases/ApplyInvoiceItemChange";
 import { InMemoryInvoiceRepository } from "../../test/doubles/InMemoryInvoiceRepository";
@@ -110,13 +110,33 @@ function makeInvoiceItem(
 
 function makeActions(initialInvoice = makeDraftInvoice()) {
   const repository = new InMemoryInvoiceRepository([initialInvoice]);
-  const useCase = new ApplyInvoiceItemChange(repository, { generate: () => crypto.randomUUID() }, { now: () => NOW });
+  const useCase = new ApplyInvoiceItemChange(
+    repository,
+    { generate: () => crypto.randomUUID() },
+    { now: () => NOW },
+  );
   const actions: InvoiceScreenActions = {
     createInvoiceDraft: { execute: vi.fn(async () => ok(initialInvoice)) },
     applyInvoiceItemChange: { execute: vi.fn((input) => useCase.execute(input)) },
-    searchProducts: { execute: vi.fn(({ query }) => ok([makeSingleUnitProduct(), makeMultiUnitProduct()]
-      .filter((product) => product.id === query || product.name.toLowerCase().includes(query.toLowerCase()) || product.sku?.toLowerCase().includes(query.toLowerCase()))
-      .map((product) => ({ product, activeUnitNames: product.units.map((unit) => unit.name), matchedBy: "fuzzy" as const, score: 0 })))) },
+    searchProducts: {
+      execute: vi.fn(({ query }) =>
+        ok(
+          [makeSingleUnitProduct(), makeMultiUnitProduct()]
+            .filter(
+              (product) =>
+                product.id === query ||
+                product.name.toLowerCase().includes(query.toLowerCase()) ||
+                product.sku?.toLowerCase().includes(query.toLowerCase()),
+            )
+            .map((product) => ({
+              product,
+              activeUnitNames: product.units.map((unit) => unit.name),
+              matchedBy: "fuzzy" as const,
+              score: 0,
+            })),
+        ),
+      ),
+    },
   };
   return { actions, repository };
 }
@@ -124,7 +144,9 @@ async function ready(actions: InvoiceScreenActions) {
   render(<CreateInvoiceScreen actions={actions} />);
   await screen.findByText("#000001");
 }
-function input(label: string) { return screen.getByLabelText(label) as HTMLInputElement; }
+function input(label: string) {
+  return screen.getByLabelText(label) as HTMLInputElement;
+}
 function edit(label: string, value: string) {
   const field = input(label);
   fireEvent.change(field, { target: { value } });
@@ -141,6 +163,9 @@ function populated() {
 }
 
 describe("Invoice spreadsheet", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
   it("starts with one focused editable row and appends only after input", async () => {
     const { actions } = makeActions();
     await ready(actions);
@@ -161,7 +186,9 @@ describe("Invoice spreadsheet", () => {
     expect(input("Đvt dòng 1")).toHaveFocus();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.change(input("Đvt dòng 1"), { target: { value: UNIT_PACK_ID } });
-    await waitFor(() => expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].unitName).toBe("Lốc 6 lon"));
+    await waitFor(() =>
+      expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].unitName).toBe("Lốc 6 lon"),
+    );
     expect(input("Đơn giá dòng 1")).toHaveValue(55000);
     expect(input("Tên hàng hóa dòng 2")).toHaveValue("");
     expect(screen.queryByLabelText("Tên hàng hóa dòng 3")).not.toBeInTheDocument();
@@ -170,7 +197,14 @@ describe("Invoice spreadsheet", () => {
   it("moves Enter/Tab through editable columns and into the next row", async () => {
     const { actions } = populated();
     await ready(actions);
-    const labels = ["Tên hàng hóa dòng 1", "Đvt dòng 1", "Số lượng dòng 1", "Đơn giá dòng 1", "CK (%) dòng 1", "Tên hàng hóa dòng 2"];
+    const labels = [
+      "Tên hàng hóa dòng 1",
+      "Đvt dòng 1",
+      "Số lượng dòng 1",
+      "Đơn giá dòng 1",
+      "CK (%) dòng 1",
+      "Tên hàng hóa dòng 2",
+    ];
     for (let index = 0; index < labels.length - 1; index++) {
       act(() => input(labels[index]).focus());
       fireEvent.keyDown(input(labels[index]), { key: index % 2 ? "Tab" : "Enter" });
@@ -186,7 +220,7 @@ describe("Invoice spreadsheet", () => {
     await ready(actions);
     edit("Số lượng dòng 1", "3");
     const field = edit("CK (%) dòng 1", "12,50");
-    const row = screen.getByRole("table").querySelector('tr[data-row-id]')!;
+    const row = screen.getByRole("table").querySelector("tr[data-row-id]")!;
     expect(row).toHaveTextContent("87.000");
     expect(row).toHaveTextContent("10.875");
     expect(row).toHaveTextContent("76.125");
@@ -194,36 +228,48 @@ describe("Invoice spreadsheet", () => {
     fireEvent.blur(field);
     await waitFor(() => expect(repository.saveDraftCalls.slice(-1)[0]?.total).toBe(76125));
     expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].discountBasisPoints).toBe(1250);
-    expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent("76.125 ₫");
+    expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent(
+      "76.125 ₫",
+    );
   });
 
-  it.each(["", "0", "-1", "1.5", "9007199254740992"])("rejects invalid quantity %s without saving", async (value) => {
-    const { actions } = populated(); await ready(actions);
-    fireEvent.blur(edit("Số lượng dòng 1", value));
-    expect(await screen.findByRole("alert")).toBeVisible();
-    expect(actions.applyInvoiceItemChange.execute).not.toHaveBeenCalled();
-  });
+  it.each(["", "0", "-1", "1.5", "9007199254740992"])(
+    "rejects invalid quantity %s without saving",
+    async (value) => {
+      const { actions } = populated();
+      await ready(actions);
+      fireEvent.blur(edit("Số lượng dòng 1", value));
+      expect(await screen.findByRole("alert")).toBeVisible();
+      expect(actions.applyInvoiceItemChange.execute).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(["-1", "100.01", "1.234", "abc", "1e1"])("rejects invalid CK %s", async (value) => {
-    const { actions } = populated(); await ready(actions);
+    const { actions } = populated();
+    await ready(actions);
     fireEvent.blur(edit("CK (%) dòng 1", value));
     expect(await screen.findByRole("alert")).toHaveTextContent("CK");
     expect(actions.applyInvoiceItemChange.execute).not.toHaveBeenCalled();
   });
 
   it("accepts zero price and 100% discount, while rejecting fractional VND", async () => {
-    const { actions, repository } = populated(); await ready(actions);
+    const { actions, repository } = populated();
+    await ready(actions);
     fireEvent.blur(edit("Đơn giá dòng 1", "1.5"));
     expect(actions.applyInvoiceItemChange.execute).not.toHaveBeenCalled();
     fireEvent.blur(edit("Đơn giá dòng 1", "0"));
     await waitFor(() => expect(repository.saveDraftCalls.slice(-1)[0]?.total).toBe(0));
     fireEvent.blur(edit("CK (%) dòng 1", "100"));
-    await waitFor(() => expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].discountBasisPoints).toBe(10000));
+    await waitFor(() =>
+      expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].discountBasisPoints).toBe(10000),
+    );
   });
 
   it("preserves edits after failure and retries the same row without duplicating it", async () => {
     const { actions, repository } = makeActions();
-    vi.mocked(actions.applyInvoiceItemChange.execute).mockResolvedValueOnce(err({ code: "persistence", operation: "save_draft", message: "offline" }));
+    vi.mocked(actions.applyInvoiceItemChange.execute).mockResolvedValueOnce(
+      err({ code: "persistence", operation: "save_draft", message: "offline" }),
+    );
     await ready(actions);
     fireEvent.keyDown(edit("Tên hàng hóa dòng 1", "Cà phê"), { key: "Enter" });
     await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
@@ -237,14 +283,29 @@ describe("Invoice spreadsheet", () => {
   it("queues edits typed while adding the same row and never creates a duplicate", async () => {
     const { actions, repository } = makeActions();
     let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const actual = new ApplyInvoiceItemChange(repository, { generate: () => crypto.randomUUID() }, { now: () => NOW });
-    vi.mocked(actions.applyInvoiceItemChange.execute).mockReset().mockImplementationOnce(async (value) => { await gate; return actual.execute(value); }).mockImplementation((value) => actual.execute(value));
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const actual = new ApplyInvoiceItemChange(
+      repository,
+      { generate: () => crypto.randomUUID() },
+      { now: () => NOW },
+    );
+    vi.mocked(actions.applyInvoiceItemChange.execute)
+      .mockReset()
+      .mockImplementationOnce(async (value) => {
+        await gate;
+        return actual.execute(value);
+      })
+      .mockImplementation((value) => actual.execute(value));
     await ready(actions);
     fireEvent.keyDown(edit("Tên hàng hóa dòng 1", "Coca"), { key: "Enter" });
     fireEvent.blur(edit("Số lượng dòng 1", "3"));
     fireEvent.blur(edit("CK (%) dòng 1", "10"));
-    await act(async () => { release(); await gate; });
+    await act(async () => {
+      release();
+      await gate;
+    });
     await waitFor(() => expect(repository.saveDraftCalls.slice(-1)[0]?.total).toBe(27000));
     expect(repository.saveDraftCalls.slice(-1)[0]?.items).toHaveLength(1);
     expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].quantity).toBe(3);
@@ -252,7 +313,8 @@ describe("Invoice spreadsheet", () => {
   });
 
   it("deletes unfinished rows, renumbers, and always retains a blank row", async () => {
-    const { actions } = makeActions(); await ready(actions);
+    const { actions } = makeActions();
+    await ready(actions);
     edit("Tên hàng hóa dòng 1", "unfinished");
     edit("Số lượng dòng 2", "2");
     expect(input("Tên hàng hóa dòng 3")).toHaveValue("");
@@ -266,8 +328,11 @@ describe("Invoice spreadsheet", () => {
 
   it("deletes saved rows and restores CK when undoing", async () => {
     const product = makeSingleUnitProduct();
-    const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0]).update({ discountBasisPoints: 1000 });
-    const { actions, repository } = makeActions(makeDraftInvoice([item])); await ready(actions);
+    const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0]).update({
+      discountBasisPoints: 1000,
+    });
+    const { actions, repository } = makeActions(makeDraftInvoice([item]));
+    await ready(actions);
     fireEvent.click(screen.getByRole("button", { name: "Xóa dòng 1" }));
     const undo = await screen.findByRole("button", { name: /Hoàn tác/ });
     fireEvent.click(undo);
@@ -276,11 +341,15 @@ describe("Invoice spreadsheet", () => {
   });
 
   it("filters/sorts without losing rows and keeps the insertion row last", async () => {
-    const one = makeSingleUnitProduct(), two = makeMultiUnitProduct();
-    const { actions } = makeActions(makeDraftInvoice([
-      makeInvoiceItem(ITEM_ID_1, one, one.units[0]),
-      makeInvoiceItem(crypto.randomUUID(), two, two.units[0]),
-    ])); await ready(actions);
+    const one = makeSingleUnitProduct(),
+      two = makeMultiUnitProduct();
+    const { actions } = makeActions(
+      makeDraftInvoice([
+        makeInvoiceItem(ITEM_ID_1, one, one.units[0]),
+        makeInvoiceItem(crypto.randomUUID(), two, two.units[0]),
+      ]),
+    );
+    await ready(actions);
     fireEvent.click(screen.getByRole("button", { name: "Đơn giá" }));
     const body = screen.getByRole("table").querySelector("tbody")!;
     expect(within(body).getAllByRole("combobox")[0]).toHaveValue(two.name);
@@ -291,14 +360,21 @@ describe("Invoice spreadsheet", () => {
   });
 
   it("supports product replacement inline and never changes catalog prices", async () => {
-    const { actions, repository } = populated(); await ready(actions);
+    const { actions, repository } = populated();
+    await ready(actions);
     await selectProduct("Coca");
-    expect(repository.saveDraftCalls.slice(-1)[0]?.items[0]).toMatchObject({ id: ITEM_ID_1, productId: PRODUCT_MULTI_UNIT_ID, unitName: "Lon", unitPrice: 10000 });
+    expect(repository.saveDraftCalls.slice(-1)[0]?.items[0]).toMatchObject({
+      id: ITEM_ID_1,
+      productId: PRODUCT_MULTI_UNIT_ID,
+      unitName: "Lon",
+      unitPrice: 10000,
+    });
     expect(makeSingleUnitProduct().units[0].price).toBe(29000);
   });
 
   it("offers catalog navigation for unmatched names without persisting invalid rows", async () => {
-    const { actions } = makeActions(); const navigate = vi.fn();
+    const { actions } = makeActions();
+    const navigate = vi.fn();
     render(<CreateInvoiceScreen actions={actions} onNavigateToProducts={navigate} />);
     await screen.findByText("#000001");
     edit("Tên hàng hóa dòng 1", "Mặt hàng mới");
@@ -308,7 +384,8 @@ describe("Invoice spreadsheet", () => {
   });
 
   it("does not submit IME composition and preserves native text undo", async () => {
-    const { actions } = makeActions(); await ready(actions);
+    const { actions } = makeActions();
+    await ready(actions);
     const field = edit("Tên hàng hóa dòng 1", "Cà phê");
     fireEvent.keyDown(field, { key: "Enter", isComposing: true });
     expect(actions.applyInvoiceItemChange.execute).not.toHaveBeenCalled();
@@ -316,7 +393,8 @@ describe("Invoice spreadsheet", () => {
   });
 
   it("blocks completion while a cell is dirty and passes discounted totals after save", async () => {
-    const { actions } = populated(); const complete = vi.fn();
+    const { actions } = populated();
+    const complete = vi.fn();
     render(<CreateInvoiceScreen actions={actions} onCompleteInvoice={complete} />);
     await screen.findByText("#000001");
     edit("CK (%) dòng 1", "5");
@@ -397,7 +475,9 @@ describe("Invoice spreadsheet", () => {
     // Screen now shows draft 1 with its items intact
     await screen.findByText("#000001");
     expect(screen.getByDisplayValue("Cà phê sữa đá")).toBeVisible();
-    expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent("29.000 ₫");
+    expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent(
+      "29.000 ₫",
+    );
   });
 
   it("allows deleting a draft from the drafts modal", async () => {
@@ -437,5 +517,53 @@ describe("Invoice spreadsheet", () => {
     fireEvent.click(deleteButton);
 
     expect(actions.deleteInvoiceDraft?.execute).toHaveBeenCalledWith(draft2.id);
+  });
+
+  it("automatically restores latest uncompleted draft on cold-start / crash recovery", async () => {
+    const product = makeSingleUnitProduct();
+    const restoredDraft = makeDraftInvoice([
+      makeInvoiceItem(ITEM_ID_1, product, product.units[0], 3, 25000),
+    ]);
+    localStorage.setItem(
+      `smart_invoice_customer_${restoredDraft.id}`,
+      JSON.stringify({
+        name: "Nguyễn Văn A",
+        phone: "0901234567",
+        note: "Giao gấp buổi trưa",
+      }),
+    );
+
+    const { actions: baseActions } = makeActions(restoredDraft);
+    const restoreSpy = vi.fn(async () => ok(restoredDraft));
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      restoreInvoiceDraft: { execute: restoreSpy },
+    };
+
+    render(<CreateInvoiceScreen actions={actions} />);
+
+    await screen.findByText("#000001");
+    expect(restoreSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByDisplayValue("Cà phê sữa đá")).toBeVisible();
+    expect(screen.getByDisplayValue("3")).toBeVisible();
+    expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue(25000);
+    expect(screen.getByDisplayValue("Nguyễn Văn A")).toBeVisible();
+    expect(screen.getByDisplayValue("0901234567")).toBeVisible();
+    expect(screen.getByDisplayValue("Giao gấp buổi trưa")).toBeVisible();
+  });
+
+  it("does not report saved and displays actionable error when semantic save fails", async () => {
+    const { actions } = makeActions();
+    vi.mocked(actions.applyInvoiceItemChange.execute).mockResolvedValueOnce(
+      err({ code: "persistence", operation: "save_draft", message: "disk failure" }),
+    );
+    await ready(actions);
+
+    fireEvent.keyDown(edit("Tên hàng hóa dòng 1", "Cà phê"), { key: "Enter" });
+    await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
+    expect(
+      screen.getAllByText("Chưa lưu được thay đổi. Hãy thử lại ô vừa sửa.").length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("Đã lưu")).toBeNull();
   });
 });

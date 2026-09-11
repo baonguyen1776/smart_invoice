@@ -4,6 +4,7 @@ import { ApplyInvoiceItemChange } from "./application/use-cases/ApplyInvoiceItem
 import { CreateInvoiceDraft } from "./application/use-cases/CreateInvoiceDraft";
 import { DeleteInvoiceDraft } from "./application/use-cases/DeleteInvoiceDraft";
 import { ListInvoices } from "./application/use-cases/ListInvoices";
+import { RestoreInvoiceDraft } from "./application/use-cases/RestoreInvoiceDraft";
 import { CreateProduct } from "./application/use-cases/CreateProduct";
 import { DeactivateProduct } from "./application/use-cases/DeactivateProduct";
 import { ListProducts } from "./application/use-cases/ListProducts";
@@ -49,6 +50,7 @@ const productActions = {
 
 const invoiceActions = {
   createInvoiceDraft: new CreateInvoiceDraft(invoiceRepository, idGenerator, clock),
+  restoreInvoiceDraft: new RestoreInvoiceDraft(invoiceRepository, idGenerator, clock),
   applyInvoiceItemChange: new ApplyInvoiceItemChange(invoiceRepository, idGenerator, clock),
   searchProducts: new SearchProducts(searchIndex),
   listInvoices: new ListInvoices(invoiceRepository),

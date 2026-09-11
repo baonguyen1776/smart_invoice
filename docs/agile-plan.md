@@ -123,7 +123,7 @@ where business logic lives, how DB migrations work, and what agents must not tou
 - [x] UX-002 Enter-to-add-item flow
 - [x] UX-003 Inline price edit (VIP override)
 - [x] UX-004 Total amount calculation
-- [ ] UX-005 Draft auto-save on semantic events (add item / edit quantity / edit price / remove item) — debounced, not on every keystroke
+- [x] UX-005 Draft auto-save on semantic events (add item / edit quantity / edit price / remove item) — debounced, not on every keystroke
 - [ ] UX-006 Complete Invoice (status draft → completed)
 - [ ] UX-007 Edit a completed invoice: confirmation dialog, then overwrite on save (confirmed decision — kept in MVP)
 
@@ -168,13 +168,3 @@ they become delivery gates.
 - [ ] DB migration tested (if schema changed)
 - [ ] Error state tested (e.g. no search match, empty required field)
 - [ ] Agent reports what changed and which commands verify it
-
-
-### Issue #17 — approved spreadsheet/discount extension (2026-09-11)
-
-- Replace illustration/add-item modal entry with an inline, automatically growing
-  nine-column invoice grid; keep one trailing blank row and a sticky total row.
-- CK: 0–100%, two decimal places, half-up VND rounding per line; save basis points
-  through migration 0004 and sum net line payments for the invoice total.
-- Preserve semantic draft writes, keyboard navigation, manual transaction prices,
-  deletion/undo, catalog identity and snapshots, and the right summary layout.
