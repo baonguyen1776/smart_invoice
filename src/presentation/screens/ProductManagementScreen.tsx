@@ -275,40 +275,23 @@ export function ProductManagementScreen({
           </p>
         )}
 
-        <section className="summary-strip" aria-label="Tổng quan danh mục">
-          <div>
-            <span className="summary-icon box" aria-hidden="true">
-              □
-            </span>
-            <p>
-              <small>SẢN PHẨM ĐANG BÁN</small>
-              <strong>{products.length}</strong>
-            </p>
-          </div>
-          <div>
-            <span className="summary-icon unit" aria-hidden="true">
-              ↔
-            </span>
-            <p>
-              <small>ĐƠN VỊ TÍNH</small>
-              <strong>{activeUnitCount}</strong>
-            </p>
-          </div>
-          <div>
-            <span className="summary-icon category" aria-hidden="true">
-              ◇
-            </span>
-            <p>
-              <small>NHÓM SẢN PHẨM</small>
-              <strong>{categories.length}</strong>
-            </p>
-          </div>
-        </section>
-
         <section className="catalog-panel" aria-labelledby="catalog-title">
           <div className="panel-heading">
-            <div>
-              <h2 id="catalog-title">Danh sách sản phẩm</h2>
+            <div className="catalog-title-group">
+              <div className="catalog-title-row">
+                <h2 id="catalog-title">Danh sách sản phẩm</h2>
+                <div className="catalog-stats-badges" aria-label="Thống kê danh mục">
+                  <span className="stat-badge products" title="Số lượng sản phẩm đang quản lý">
+                    <strong>{products.length}</strong> sản phẩm
+                  </span>
+                  <span className="stat-badge units" title="Tổng số đơn vị tính đang hoạt động">
+                    <strong>{activeUnitCount}</strong> ĐVT
+                  </span>
+                  <span className="stat-badge categories" title="Số nhóm sản phẩm">
+                    <strong>{categories.length}</strong> nhóm
+                  </span>
+                </div>
+              </div>
               <p>
                 {visibleProducts.length} trong {products.length} sản phẩm
               </p>
