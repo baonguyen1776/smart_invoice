@@ -1,0 +1,539 @@
+/* ─── Modern High-Density Spreadsheet Grid ─────────────── */
+.invoice-grid-card {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card, 12px);
+  box-shadow: var(--shadow-card, 0 1px 3px rgba(0, 0, 0, 0.05));
+  overflow: hidden;
+}
+
+.invoice-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.invoice-table-toolbar .invoice-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.invoice-table-toolbar h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.invoice-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--primary);
+  background: var(--accent-soft, #eff6ff);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.invoice-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invoice-line-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  background: var(--surface-soft, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 34px;
+  width: 260px;
+  max-width: 100%;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+.invoice-line-filter:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background: var(--surface);
+}
+
+.invoice-line-filter input {
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  width: 100%;
+  outline: none;
+  padding: 0;
+}
+
+.invoice-line-filter input::placeholder {
+  color: var(--muted);
+}
+
+/* ─── Scroll Container & Table Base ─────────────────────── */
+.invoice-grid-scroll {
+  max-height: min(65vh, 680px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.invoice-table.invoice-grid {
+  width: 100%;
+  min-width: 900px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  font-family: inherit;
+}
+
+/* ─── Column widths ────────────────────────────────────── */
+.grid-col-number           { width: 44px; }
+.grid-col-name             { width: 23%; }
+.grid-col-unit             { width: 8.5%; }
+.grid-col-quantity         { width: 7.5%; }
+.grid-col-price            { width: 11.5%; }
+.grid-col-subtotal         { width: 12%; }
+.grid-col-discount         { width: 7.5%; }
+.grid-col-discount-amount  { width: 11.5%; }
+.grid-col-payment          { width: 14%; }
+.grid-col-delete           { width: 42px; }
+
+/* ─── Header row ───────────────────────────────────────── */
+.invoice-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 38px;
+  padding: 0;
+  background: #f8fafc;
+  color: var(--muted, #64748b);
+  font-weight: 600;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-strong, #cbd5e1);
+  border-right: 1px solid var(--border, #e2e8f0);
+  white-space: nowrap;
+  user-select: none;
+  vertical-align: middle;
+}
+
+.invoice-grid thead th:last-child {
+  border-right: none;
+}
+
+.invoice-grid th:first-child,
+.invoice-grid th:last-child {
+  text-align: center;
+}
+
+.invoice-grid th button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  gap: 5px;
+}
+
+/* Align text and buttons properly for headers */
+.invoice-grid th:nth-child(2) button,
+.invoice-grid th:nth-child(3) button {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.invoice-grid th:nth-child(n+4):not(:last-child) button {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.invoice-grid th button svg {
+  flex-shrink: 0;
+  opacity: 0.35;
+  transition: opacity 150ms ease;
+}
+
+.invoice-grid th:hover button svg,
+.invoice-grid th:focus-within button svg,
+.invoice-grid th[aria-sort="ascending"] svg,
+.invoice-grid th[aria-sort="descending"] svg {
+  opacity: 1;
+  color: var(--primary);
+}
+
+/* ─── Table Body Cells (Exact Alignment & Proportionality) ── */
+.invoice-grid td {
+  padding: 0;
+  height: 40px;
+  vertical-align: middle;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  background: var(--surface);
+  transition: background-color 100ms ease;
+  box-sizing: border-box;
+}
+
+.invoice-grid td:last-child {
+  border-right: none;
+}
+
+/* Zebra striping */
+.invoice-grid tbody tr:nth-child(even):not(.invoice-grid-blank) td {
+  background: rgba(248, 250, 252, 0.6);
+}
+
+/* Row hover */
+.invoice-grid tbody tr:not(.invoice-grid-blank):hover td {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+/* ─── Active Cell Focus (SINGLE CLEAN 2px OUTLINE, NO OVERLAP) ── */
+.invoice-grid td:focus-within {
+  background: #ffffff !important;
+  box-shadow: inset 0 0 0 2px var(--primary) !important;
+  z-index: 4;
+  position: relative;
+}
+
+/* Strip all outlines from elements inside invoice-grid so they NEVER double up */
+.invoice-grid input,
+.invoice-grid select,
+.invoice-grid .invoice-grid-input,
+.invoice-frame .invoice-grid input,
+.invoice-frame .invoice-grid select,
+.invoice-grid input:focus,
+.invoice-grid select:focus,
+.invoice-grid input:focus-visible,
+.invoice-grid select:focus-visible,
+.invoice-frame .invoice-grid input:focus,
+.invoice-frame .invoice-grid input:focus-visible,
+.invoice-frame .invoice-grid select:focus,
+.invoice-frame .invoice-grid select:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* ─── Row Number Column ────────────────────────────────── */
+.invoice-grid .grid-row-number {
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface-soft);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  user-select: none;
+}
+
+.invoice-grid .grid-row-number > span,
+.invoice-grid .grid-row-number {
+  line-height: 40px;
+}
+
+/* ─── Editable Input Cells ─────────────────────────────── */
+.invoice-frame .invoice-grid-input {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 40px;
+  color: var(--ink);
+  box-sizing: border-box;
+}
+
+.invoice-frame .invoice-grid-input::placeholder {
+  color: var(--border-strong, #94a3b8);
+  opacity: 0.8;
+}
+
+/* Numeric inputs: Số lượng, Đơn giá, CK (%) */
+.invoice-grid-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+  -moz-appearance: textfield;
+}
+
+.invoice-grid-number::-webkit-inner-spin-button,
+.invoice-grid-number::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Product name cell */
+.invoice-grid-product {
+  font-weight: 500 !important;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+/* Unit select dropdown */
+.invoice-grid select.invoice-grid-input {
+  cursor: pointer;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Validation error state */
+.invoice-grid td:has(.invoice-grid-input[aria-invalid="true"]) {
+  box-shadow: inset 0 0 0 2px var(--danger) !important;
+}
+
+.invoice-grid td:has(.invoice-grid-product) {
+  position: relative;
+}
+
+.invoice-grid .invoice-field-error {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 8px;
+  z-index: 20;
+  background: #fff;
+  color: var(--danger, #ef4444);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* ─── Read-only Amount Cells (Thành tiền, Tiền CK, Thanh toán) ── */
+.invoice-grid .grid-amount {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.invoice-grid .grid-amount > span {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 12px;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* Thanh toán (Net Payment) column */
+.invoice-grid .grid-payment {
+  background: rgba(37, 99, 235, 0.035);
+}
+
+.invoice-grid .grid-payment > span {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 0 14px;
+}
+
+/* ─── Delete Button ────────────────────────────────────── */
+.invoice-grid .btn-delete-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.invoice-grid tr:hover .btn-delete-row,
+.invoice-grid tr:focus-within .btn-delete-row {
+  opacity: 0.75;
+}
+
+.invoice-grid .btn-delete-row:hover {
+  opacity: 1;
+  color: var(--danger, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ─── Trailing Blank Row ───────────────────────────────── */
+.invoice-grid-blank td {
+  background: var(--surface-soft, #f8fafc) !important;
+  border-bottom-style: dashed;
+}
+
+.invoice-grid-blank .grid-row-number {
+  color: var(--border-strong, #94a3b8);
+  font-weight: 400;
+}
+
+.invoice-grid-blank:hover td {
+  background: rgba(241, 245, 249, 0.85) !important;
+}
+
+/* ─── Saving Indicator ─────────────────────────────────── */
+.invoice-grid tr[aria-busy="true"] td {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ─── Fixed Total Row (Excel "Tổng Cộng" style) ──────────── */
+.invoice-grid tfoot {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+
+.invoice-grid-total-row td {
+  background: #fef08a !important; /* Authentic yellow highlight like Excel reference */
+  border-top: 2px solid #ca8a04 !important;
+  border-bottom: 2px solid #ca8a04 !important;
+  border-right: 1px solid #d97706 !important;
+  color: #0f172a !important;
+  font-weight: 700;
+  height: 38px;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.invoice-grid-total-row td:last-child {
+  border-right: none !important;
+}
+
+.invoice-grid-total-row .grid-total-label {
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #0f172a !important;
+  padding: 0 12px;
+}
+
+.invoice-grid-total-row .grid-amount {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a !important;
+  padding-right: 12px;
+}
+
+.invoice-grid-total-row .grid-payment {
+  color: #0f172a !important;
+}
+
+.invoice-grid-total-row .grid-total-empty {
+  background: #fef08a !important;
+}
+
+.invoice-grid-total-row:hover td {
+  background: #fde047 !important;
+}
+
+/* ─── Product Suggestions Dropdown ─────────────────────── */
+.invoice-grid-suggestions {
+  position: fixed;
+  z-index: 1000;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.invoice-grid-suggestions ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.invoice-grid-suggestions li {
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+
+.invoice-grid-suggestions li[aria-selected="true"],
+.invoice-grid-suggestions li:hover {
+  background: var(--accent-soft, #eff6ff);
+}
+
+.invoice-grid-suggestions strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.invoice-grid-suggestions small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.invoice-grid-no-results {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ─── Loading skeleton ─────────────────────────────────── */
+.invoice-grid tr[aria-hidden="true"] td {
+  padding: 8px 6px;
+}
+
+/* ─── Reduced motion ───────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .invoice-grid *,
+  .invoice-grid-suggestions * { transition: none !important; }
+}
