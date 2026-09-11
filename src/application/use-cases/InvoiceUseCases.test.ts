@@ -5,6 +5,7 @@ import { ApplyInvoiceItemChange } from "./ApplyInvoiceItemChange";
 import { CompleteInvoice } from "./CompleteInvoice";
 import { CreateInvoiceDraft } from "./CreateInvoiceDraft";
 import { OverwriteCompletedInvoice } from "./OverwriteCompletedInvoice";
+import { RestoreInvoiceDraft } from "./RestoreInvoiceDraft";
 import { InMemoryInvoiceRepository } from "../../test/doubles/InMemoryInvoiceRepository";
 import { Invoice } from "../../domain/entities/Invoice";
 import { InvoiceItem } from "../../domain/entities/InvoiceItem";
@@ -23,10 +24,10 @@ function draft(withItem = false): Invoice {
   return withItem ? invoice.replaceDraftItems([line()], NOW) : invoice;
 }
 
-function line(id = ITEM_ID): InvoiceItem {
+function line(id = ITEM_ID, invoiceId = INVOICE_ID): InvoiceItem {
   return InvoiceItem.create({
     id,
-    invoiceId: INVOICE_ID,
+    invoiceId,
     productId: PRODUCT_ID,
     unitId: UNIT_ID,
     productName: "Coca Cola",
@@ -175,12 +176,48 @@ describe("Invoice use cases", () => {
       error: { code: "persistence", operation: "complete", message: "disk full" },
     });
   });
+
+  it("restores existing draft by preferred ID or newest draft on crash recovery / reopening", async () => {
+    const draft1 = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      createdAt: "2026-09-10T01:00:00.000Z",
+    });
+    const draft2Id = "10000000-0000-4000-8000-000000000002";
+    const draft2 = Invoice.createDraft({
+      id: draft2Id,
+      invoiceNumber: 2,
+      createdAt: "2026-09-10T02:00:00.000Z",
+    }).replaceDraftItems([line(ITEM_ID, draft2Id)], "2026-09-10T02:05:00.000Z");
+
+    const repository = new InMemoryInvoiceRepository([draft1, draft2]);
+    const restoreUseCase = new RestoreInvoiceDraft(repository, ids, clock);
+
+    // Preferred ID found
+    const preferredResult = await restoreUseCase.execute({ preferredInvoiceId: INVOICE_ID });
+    expect(preferredResult.ok && preferredResult.value.id).toBe(INVOICE_ID);
+
+    // Preferred ID missing: restores newest draft (draft2 was updated at 02:05)
+    const latestResult = await restoreUseCase.execute();
+    expect(latestResult.ok && latestResult.value.id).toBe(draft2Id);
+    expect(latestResult.ok && latestResult.value.items).toHaveLength(1);
+
+    // Empty repository: automatically creates new draft
+    const emptyRepo = new InMemoryInvoiceRepository([], 99);
+    const emptyUseCase = new RestoreInvoiceDraft(emptyRepo, { generate: () => INVOICE_ID }, clock);
+    const newDraftResult = await emptyUseCase.execute();
+    expect(newDraftResult.ok && newDraftResult.value.invoiceNumber).toBe(99);
+    expect(emptyRepo.createDraftCalls).toHaveLength(1);
+  });
 });
 
 it("persists discounts across completion without losing snapshots", async () => {
   const repository = new InMemoryInvoiceRepository([draft(true)]);
   const edit = new ApplyInvoiceItemChange(repository, ids, clock);
-  const result = await edit.execute({ invoiceId: INVOICE_ID, change: { type: "update", itemId: ITEM_ID, values: { discountBasisPoints: 1250 } } });
+  const result = await edit.execute({
+    invoiceId: INVOICE_ID,
+    change: { type: "update", itemId: ITEM_ID, values: { discountBasisPoints: 1250 } },
+  });
   expect(result.ok && result.value.total).toBe(21000);
   expect(result.ok && result.value.items[0].productName).toBe("Coca Cola");
   const completed = await new CompleteInvoice(repository, clock).execute({ invoiceId: INVOICE_ID });
