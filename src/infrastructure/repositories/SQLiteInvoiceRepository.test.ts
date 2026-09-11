@@ -144,3 +144,17 @@ describe("SQLiteInvoiceRepository", () => {
     expect(JSON.stringify(result)).not.toContain("SQLITE_LOCKED");
   });
 });
+
+it("round-trips persisted discount basis points and net totals through the command DTO", async () => {
+  const item = makeItem().update({ discountBasisPoints: 1250 });
+  const invoice = makeDraft().replaceDraftItems([item], NOW);
+  const invoker = vi.fn<CommandInvoker>().mockResolvedValue(undefined);
+  const repository = new SQLiteInvoiceRepository(invoker);
+  expect((await repository.saveDraft(invoice)).ok).toBe(true);
+  const record = invoker.mock.calls[0][1]?.invoice;
+  expect(record).toMatchObject({ total: 17500, items: [expect.objectContaining({ subtotal: 20000, discountBasisPoints: 1250 })] });
+  invoker.mockResolvedValue(record);
+  const restored = await repository.findById(INVOICE_ID);
+  expect(restored.ok && restored.value?.items[0].discountAmount).toBe(2500);
+  expect(restored.ok && restored.value?.total).toBe(17500);
+});

@@ -103,26 +103,26 @@ where business logic lives, how DB migrations work, and what agents must not tou
 
 **Agent split:** Opus for the unit-selection/price-fill logic and the search-index refresh strategy; Gemini 3.8 Flash for CRUD, dropdown UI, and Fuse.js wiring itself (well-documented library — a Build task, not a Review task).
 
-- [ ] INV-001 Create Invoice (persisted, status = draft)
-- [ ] INV-002 Add Invoice Item
-- [ ] INV-003 Remove Invoice Item
-- [ ] INV-004 Edit Item Quantity
+- [x] INV-001 Create Invoice (persisted, status = draft)
+- [x] INV-002 Add Invoice Item
+- [x] INV-003 Remove Invoice Item
+- [x] INV-004 Edit Item Quantity
 - [x] INV-005 Add ProductAlias through a new numbered migration, then build an
   in-memory Fuse.js index over Product + ProductAlias (not a DB query per
   keystroke); refresh the index whenever a Product is created/edited/deactivated
-- [ ] INV-006 Autocomplete dropdown UI, keyboard navigation (↑↓ + Enter), best match highlighted by default
-- [ ] INV-007 Unit selection (auto-fill if 1 unit, prompt if multiple)
-- [ ] INV-008 Item subtotal calculation (unit price × quantity)
-- [ ] INV-009 Save Draft to DB
+- [x] INV-006 Autocomplete dropdown UI, keyboard navigation (↑↓ + Enter), best match highlighted by default
+- [x] INV-007 Unit selection (auto-fill if 1 unit, prompt if multiple)
+- [x] INV-008 Item subtotal calculation (unit price × quantity)
+- [x] INV-009 Save Draft to DB
 
 ## Sprint 3 — Fast Invoice UX + Completion (3-4 days)
 
 **Agent split:** Opus for the draft → completed state machine and the edit-completed confirm/overwrite flow; Gemini 3.8 Flash for keyboard UX, total calculation UI, and the confirm dialog component.
 
-- [ ] UX-001 Keyboard navigation across the whole invoice form (focus management)
-- [ ] UX-002 Enter-to-add-item flow
-- [ ] UX-003 Inline price edit (VIP override)
-- [ ] UX-004 Total amount calculation
+- [x] UX-001 Keyboard navigation across the whole invoice form (focus management)
+- [x] UX-002 Enter-to-add-item flow
+- [x] UX-003 Inline price edit (VIP override)
+- [x] UX-004 Total amount calculation
 - [ ] UX-005 Draft auto-save on semantic events (add item / edit quantity / edit price / remove item) — debounced, not on every keystroke
 - [ ] UX-006 Complete Invoice (status draft → completed)
 - [ ] UX-007 Edit a completed invoice: confirmation dialog, then overwrite on save (confirmed decision — kept in MVP)
@@ -168,3 +168,13 @@ they become delivery gates.
 - [ ] DB migration tested (if schema changed)
 - [ ] Error state tested (e.g. no search match, empty required field)
 - [ ] Agent reports what changed and which commands verify it
+
+
+### Issue #17 — approved spreadsheet/discount extension (2026-09-11)
+
+- Replace illustration/add-item modal entry with an inline, automatically growing
+  nine-column invoice grid; keep one trailing blank row and a sticky total row.
+- CK: 0–100%, two decimal places, half-up VND rounding per line; save basis points
+  through migration 0004 and sum net line payments for the invoice total.
+- Preserve semantic draft writes, keyboard navigation, manual transaction prices,
+  deletion/undo, catalog identity and snapshots, and the right summary layout.

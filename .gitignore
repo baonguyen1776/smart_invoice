@@ -15,6 +15,7 @@ dist-ssr
 coverage
 .benchmark-dist
 .agents
+.ui-review
 
 # Editor directories and files
 .vscode/*

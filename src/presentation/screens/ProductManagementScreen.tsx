@@ -1,3 +1,4 @@
+import { WorkspaceSidebar } from "../components/WorkspaceSidebar";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { ProductCatalogError } from "../../application/errors/ProductCatalogError";
 import type { Result } from "../../application/shared/Result";
@@ -17,8 +18,11 @@ export interface ProductManagementActions {
   readonly listProducts: Pick<ListProducts, "execute">;
 }
 
-interface ProductManagementScreenProps {
+export interface ProductManagementScreenProps {
   readonly actions: ProductManagementActions;
+  readonly onNavigate?: (screen: "invoice" | "products") => void;
+  readonly activeScreen?: "invoice" | "products";
+  readonly initialCreateQuery?: string;
 }
 interface UnitDraft {
   readonly key: string;
@@ -42,17 +46,32 @@ const EMPTY_DRAFT: ProductDraft = {
   units: [{ key: "new-0", id: null, name: "", price: "" }],
 };
 
-export function ProductManagementScreen({ actions }: ProductManagementScreenProps) {
+export function ProductManagementScreen({
+  actions,
+  onNavigate,
+  activeScreen = "products",
+  initialCreateQuery,
+}: ProductManagementScreenProps) {
   const [products, setProducts] = useState<readonly Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(() =>
+    Boolean(initialCreateQuery && initialCreateQuery.trim().length > 0),
+  );
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productPendingDeactivation, setProductPendingDeactivation] = useState<Product | null>(
     null,
   );
-  const [draft, setDraft] = useState<ProductDraft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<ProductDraft>(() => {
+    if (initialCreateQuery && initialCreateQuery.trim().length > 0) {
+      return {
+        ...EMPTY_DRAFT,
+        name: initialCreateQuery.trim(),
+      };
+    }
+    return EMPTY_DRAFT;
+  });
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deactivationError, setDeactivationError] = useState<string | null>(null);
@@ -232,32 +251,13 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
 
   return (
     <div className="app-frame">
-      <aside className="sidebar" aria-label="Điều hướng chính">
-        <div className="brand-mark">
-          <span>SI</span>
-          <strong>Smart Invoice</strong>
-        </div>
-        <nav>
-          <p>QUẢN LÝ</p>
-          <a className="active" href="#catalog-title" aria-current="page">
-            <span aria-hidden="true">▦</span>Sản phẩm
-          </a>
-        </nav>
-        <div className="offline-note">
-          <span aria-hidden="true">●</span>
-          <div>
-            <strong>Dữ liệu cục bộ</strong>
-            <small>Sẵn sàng ngoại tuyến</small>
-          </div>
-        </div>
-      </aside>
+      <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
 
       <main className="workspace">
         <header className="page-header">
           <div>
-            <p className="breadcrumb">Danh mục / Sản phẩm</p>
+            <p className="breadcrumb">Không gian làm việc / Sản phẩm</p>
             <h1>Quản lý sản phẩm</h1>
-            <p className="subtitle">Tra cứu và cập nhật bảng giá bán tại một nơi.</p>
           </div>
           <button className="primary-button" type="button" onClick={openCreateForm}>
             <span aria-hidden="true">＋</span> Thêm sản phẩm
@@ -362,7 +362,6 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
           ) : products.length === 0 ? (
             <div className="empty-state">
               <strong>Chưa có sản phẩm</strong>
-              <span>Thêm sản phẩm đầu tiên để bắt đầu tạo hóa đơn.</span>
               <button className="primary-button" type="button" onClick={openCreateForm}>
                 Thêm sản phẩm
               </button>
@@ -370,7 +369,6 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
           ) : visibleProducts.length === 0 ? (
             <div className="empty-state">
               <strong>Không tìm thấy sản phẩm</strong>
-              <span>Thử từ khóa khác hoặc bỏ bộ lọc.</span>
               <button
                 className="secondary-button"
                 type="button"
@@ -512,7 +510,6 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                       onChange={(event) => setDraft({ ...draft, name: event.target.value })}
                       placeholder="Ví dụ: Cà phê rang xay"
                     />
-                    <small className="field-help">Tên hiển thị khi tìm kiếm và lập hóa đơn.</small>
                   </label>
                   <label>
                     <span className="field-label">
@@ -522,11 +519,7 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                       value={draft.sku}
                       onChange={(event) => setDraft({ ...draft, sku: event.target.value })}
                       placeholder="Ví dụ: CF-001"
-                      aria-describedby="product-code-help"
                     />
-                    <small id="product-code-help" className="field-help">
-                      Mã riêng giúp tìm và phân biệt sản phẩm nhanh hơn (còn gọi là SKU).
-                    </small>
                   </label>
                   <label>
                     <span className="field-label">
@@ -538,7 +531,6 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                       list="brand-suggestions"
                       placeholder="Chọn hoặc nhập mới"
                     />
-                    <small className="field-help">Có thể chọn nhanh một thương hiệu đã dùng.</small>
                   </label>
                   <label>
                     <span className="field-label">
@@ -550,7 +542,6 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                       list="category-suggestions"
                       placeholder="Chọn hoặc nhập mới"
                     />
-                    <small className="field-help">Có thể chọn nhanh một nhóm đã dùng.</small>
                   </label>
                   <datalist id="brand-suggestions">
                     {brands.map((brand) => (
@@ -569,7 +560,6 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                       <legend>
                         Đơn vị bán <span aria-hidden="true">*</span>
                       </legend>
-                      <p>Giá là số nguyên, đơn vị VND.</p>
                     </div>
                     <button className="secondary-button" type="button" onClick={addUnit}>
                       + Thêm đơn vị
@@ -587,7 +577,7 @@ export function ProductManagementScreen({ actions }: ProductManagementScreenProp
                         />
                       </label>
                       <label>
-                        Giá bán
+                        Giá bán (VND)
                         <input
                           required
                           inputMode="numeric"

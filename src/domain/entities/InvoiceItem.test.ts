@@ -83,3 +83,15 @@ describe("InvoiceItem", () => {
     });
   });
 });
+
+it("defaults historical lines to no discount and persists/recalculates discount edits", () => {
+  const original = InvoiceItem.create(validInput());
+  expect(original.discountBasisPoints).toBe(0);
+  const discounted = original.update({ unitPrice: 105, quantity: 1, discountBasisPoints: 1000 });
+  expect(discounted.discountAmount).toBe(11);
+  expect(discounted.payment).toBe(94);
+  const restored = InvoiceItem.rehydrate(discounted.toState());
+  expect(restored.update({ quantity: 2 }).discountAmount).toBe(21);
+  expect(restored.discountBasisPoints).toBe(1000);
+  expect(() => restored.update({ discountBasisPoints: 10001 })).toThrow(InvoiceItemValidationError);
+});

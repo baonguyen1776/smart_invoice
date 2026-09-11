@@ -1,3 +1,5 @@
+import { calculateInvoiceLineAmounts } from "../rules/CalculateInvoiceAmounts";
+
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface InvoiceItemState {
@@ -12,14 +14,17 @@ export interface InvoiceItemState {
   readonly unitPrice: number;
   readonly quantity: number;
   readonly subtotal: number;
+  readonly discountBasisPoints: number;
   readonly createdAt: string;
 }
 
-export type CreateInvoiceItemInput = Omit<InvoiceItemState, "subtotal">;
+export type CreateInvoiceItemInput = Omit<InvoiceItemState, "subtotal" | "discountBasisPoints"> & { readonly discountBasisPoints?: number };
 
 export interface UpdateInvoiceItemInput {
   readonly quantity?: number;
   readonly unitPrice?: number;
+  readonly discountBasisPoints?: number;
+  readonly selection?: Pick<InvoiceItemState, "productId" | "unitId" | "productName" | "productSku" | "productBrand" | "unitName">;
 }
 
 export class InvoiceItemValidationError extends Error {
@@ -41,6 +46,7 @@ export class InvoiceItem {
   readonly unitPrice: number;
   readonly quantity: number;
   readonly subtotal: number;
+  readonly discountBasisPoints: number;
   readonly createdAt: string;
 
   private constructor(state: InvoiceItemState) {
@@ -55,8 +61,15 @@ export class InvoiceItem {
     this.unitPrice = state.unitPrice;
     this.quantity = state.quantity;
     this.subtotal = state.subtotal;
+    this.discountBasisPoints = state.discountBasisPoints;
     this.createdAt = state.createdAt;
   }
+
+  get discountAmount(): number {
+    return calculateInvoiceLineAmounts(this.quantity, this.unitPrice, this.discountBasisPoints).discountAmount;
+  }
+
+  get payment(): number { return this.subtotal - this.discountAmount; }
 
   static create(input: CreateInvoiceItemInput): InvoiceItem {
     return InvoiceItem.fromValues(input);
@@ -75,6 +88,8 @@ export class InvoiceItem {
   update(input: UpdateInvoiceItemInput): InvoiceItem {
     return InvoiceItem.fromValues({
       ...this.toState(),
+      ...input.selection,
+      discountBasisPoints: input.discountBasisPoints ?? this.discountBasisPoints,
       quantity: input.quantity ?? this.quantity,
       unitPrice: input.unitPrice ?? this.unitPrice,
     });
@@ -93,6 +108,7 @@ export class InvoiceItem {
       unitPrice: this.unitPrice,
       quantity: this.quantity,
       subtotal: this.subtotal,
+      discountBasisPoints: this.discountBasisPoints,
       createdAt: this.createdAt,
     };
   }
@@ -109,8 +125,13 @@ export class InvoiceItem {
       throw new InvoiceItemValidationError("quantity must be a positive safe integer.");
     }
 
-    const subtotal = input.unitPrice * input.quantity;
-    validateMoney(subtotal, "subtotal");
+    const discountBasisPoints = input.discountBasisPoints ?? 0;
+    let subtotal: number;
+    try {
+      subtotal = calculateInvoiceLineAmounts(input.quantity, input.unitPrice, discountBasisPoints).subtotal;
+    } catch (error) {
+      throw new InvoiceItemValidationError(error instanceof Error ? error.message : "Invalid invoice amounts.");
+    }
 
     return new InvoiceItem({
       ...input,
@@ -119,6 +140,7 @@ export class InvoiceItem {
       productBrand: normalizeOptionalText(input.productBrand, "productBrand"),
       unitName: normalizeRequiredText(input.unitName, "unitName"),
       subtotal,
+      discountBasisPoints,
     });
   }
 }

@@ -598,7 +598,7 @@ Required constraints and indexes:
 | `id` | `TEXT PRIMARY KEY NOT NULL` | UUID v4; immutable |
 | `invoice_number` | `INTEGER NOT NULL UNIQUE` | positive, user-facing identity |
 | `status` | `TEXT NOT NULL DEFAULT 'draft'` | `draft` or `completed` only |
-| `total` | `INTEGER NOT NULL DEFAULT 0` | non-negative integer VND |
+| `total` | `INTEGER NOT NULL DEFAULT 0` | sum of item payments after line discounts, integer VND |
 | `created_at` | `TEXT NOT NULL` | immutable UTC timestamp |
 | `updated_at` | `TEXT NOT NULL` | UTC timestamp updated on mutation |
 | `completed_at` | nullable `TEXT` | null for draft; set on first completion |
@@ -645,11 +645,12 @@ State rules:
 | `unit_name` | `TEXT NOT NULL` | transaction-time snapshot |
 | `unit_price` | `INTEGER NOT NULL` | actual transaction price, including VIP override |
 | `quantity` | `INTEGER NOT NULL` | positive integer |
-| `subtotal` | `INTEGER NOT NULL` | `unit_price * quantity` |
+| `subtotal` | `INTEGER NOT NULL` | `unit_price * quantity`, before discount |
+| `discount_basis_points` | `INTEGER NOT NULL DEFAULT 0` (migration `0004`) | integer `0..10000`; one basis point = 0.01% |
 | `created_at` | `TEXT NOT NULL` | immutable UTC timestamp |
 
 Application code supplies every InvoiceItem field after Domain validation;
-InvoiceItem columns have no database defaults, including nullable snapshot
+Original InvoiceItem columns have no database defaults, including nullable snapshot
 fields, which are supplied explicitly as `NULL` when absent.
 
 Required constraints and indexes:
@@ -665,6 +666,24 @@ Required constraints and indexes:
 - Indexes support lookup by `invoice_id`, `product_id`, and `unit_id`.
 - Invoice history renders snapshot fields and never reads mutable catalog
   names, brands, SKUs, Unit names, or prices for historical display.
+
+### Line discounts (approved September 11, 2026)
+
+- CK is 0–100%, with up to two decimal places, persisted as integer basis points.
+- `subtotal = unit_price * quantity` remains the gross line amount.
+- `discountAmount = roundHalfUp(subtotal * discount_basis_points / 10000)` in VND,
+  rounded once per line. Integer arithmetic must preserve exact rounding at the
+  safe-integer boundary (BigInt in Domain, i128 in the persistence guard).
+- `payment = subtotal - discountAmount`; `Invoice.total` sums line payments.
+  Gross, discount, and payment aggregates must each fit the safe-integer range.
+- Draft saving, completion, and confirmed overwrite persist the percentage and
+  net invoice total atomically. Discount amounts are derived, not independently
+  editable or persisted. Migration `0004_invoice_item_discount.sql` defaults old
+  items to zero without changing historical totals or snapshots.
+- Inline product/unit replacement is a semantic draft edit: retain line identity
+  and creation timestamp, capture the selected catalog product and its owned unit
+  as transaction snapshots, and use the selected unit price. Manual line-price
+  overrides and CK never modify catalog prices.
 
 ### 19.7 Transaction Boundaries
 

@@ -176,3 +176,15 @@ describe("Invoice use cases", () => {
     });
   });
 });
+
+it("persists discounts across completion without losing snapshots", async () => {
+  const repository = new InMemoryInvoiceRepository([draft(true)]);
+  const edit = new ApplyInvoiceItemChange(repository, ids, clock);
+  const result = await edit.execute({ invoiceId: INVOICE_ID, change: { type: "update", itemId: ITEM_ID, values: { discountBasisPoints: 1250 } } });
+  expect(result.ok && result.value.total).toBe(21000);
+  expect(result.ok && result.value.items[0].productName).toBe("Coca Cola");
+  const completed = await new CompleteInvoice(repository, clock).execute({ invoiceId: INVOICE_ID });
+  expect(completed.ok && completed.value.total).toBe(21000);
+  const loaded = await repository.findById(INVOICE_ID);
+  expect(loaded.ok && loaded.value?.items[0].discountBasisPoints).toBe(1250);
+});

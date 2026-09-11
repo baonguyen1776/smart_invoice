@@ -108,8 +108,16 @@ nearest-rank sample.
 | Index load | 20 | 57.414 | 60.928 | 61.372 | ≤500 ms P95, ≤1,000 ms max |
 | Autocomplete | 100 | 48.822 | 50.654 | 53.664 | ≤100 ms P95, ≤300 ms max |
 
-Both measured paths meet NFR-PERF-003 and NFR-PERF-004 on this environment.
-Cross-platform/minimum-spec measurements remain unverified.
+## #17 — Keyboard-first Create Invoice UI
+
+[Issue #17](https://github.com/baonguyen1776/smart_invoice/issues/17) — implementation checks passed on 2026-09-10.
+
+- Built `CreateInvoiceScreen` for the UC-01 cashier workflow, supporting keyboard-driven autocomplete search, multi-unit selection, item line addition, quantity editing, VIP unit-price overrides, and line removal with undo support.
+- Top-level `App` provides sidebar navigation between Create Invoice and Product Management, defaulting to Create Invoice when invoice actions are present, and supports navigating with pre-filled search query from the not-found state.
+- In-memory Fuse.js candidate selection distinguishes duplicate names using SKU, brand, category, and active unit tags. Selecting a single-unit product automatically populates price and adds the line; multi-unit products display a modal with 1..9 numeric shortcuts.
+- Manual VIP price overrides change only the transaction-time `InvoiceItem.unitPrice` and `subtotal`, leaving the catalog `Unit.price` unchanged.
+- Frontend: 132 tests across 15 files passed; typecheck, lint, production build, format, and diff checks passed.
+- Rust: 28 unit/regression tests passed; fmt and Clippy (all targets, warnings denied) passed.
 
 ## Run checks
 

@@ -16,7 +16,11 @@ export interface InvoiceRepository {
     input: CreateDraftPersistenceInput,
   ): Promise<Result<Invoice, InvoicePersistenceFailure>>;
   findById(invoiceId: string): Promise<Result<Invoice | null, InvoicePersistenceFailure>>;
+  listInvoices(
+    status?: Invoice["status"],
+  ): Promise<Result<readonly Invoice[], InvoicePersistenceFailure>>;
   saveDraft(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>>;
   complete(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>>;
   overwriteCompleted(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>>;
+  deleteDraft(invoiceId: string): Promise<Result<void, InvoicePersistenceFailure>>;
 }
