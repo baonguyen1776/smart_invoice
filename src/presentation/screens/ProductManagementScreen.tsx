@@ -5,6 +5,7 @@ import type { Result } from "../../application/shared/Result";
 import type { CreateProduct, CreateProductInput } from "../../application/use-cases/CreateProduct";
 import type { DeactivateProduct } from "../../application/use-cases/DeactivateProduct";
 import type { ListProducts } from "../../application/use-cases/ListProducts";
+import type { ReactivateProduct } from "../../application/use-cases/ReactivateProduct";
 import type {
   UpdateProduct,
   UpdateProductUnitInput,
@@ -15,6 +16,7 @@ export interface ProductManagementActions {
   readonly createProduct: Pick<CreateProduct, "execute">;
   readonly updateProduct: Pick<UpdateProduct, "execute">;
   readonly deactivateProduct: Pick<DeactivateProduct, "execute">;
+  readonly reactivateProduct?: Pick<ReactivateProduct, "execute">;
   readonly listProducts: Pick<ListProducts, "execute">;
 }
 
@@ -75,7 +77,9 @@ export function ProductManagementScreen({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deactivationError, setDeactivationError] = useState<string | null>(null);
+  const [isReactivating, setIsReactivating] = useState(false);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
   const [brandFilter, setBrandFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
 
@@ -99,14 +103,10 @@ export function ProductManagementScreen({
       );
     });
   }, [brandFilter, categoryFilter, products, query]);
-  const activeUnitCount = products.reduce(
-    (total, product) => total + product.units.filter((unit) => unit.isActive).length,
-    0,
-  );
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
-    const result = await actions.listProducts.execute({ activity: "active" });
+    const result = await actions.listProducts.execute({ activity: statusFilter });
     setIsLoading(false);
     if (!result.ok) {
       setError(toUserMessage(result.error));
@@ -114,12 +114,12 @@ export function ProductManagementScreen({
     }
     setProducts(result.value);
     setError(null);
-  }, [actions.listProducts]);
+  }, [actions.listProducts, statusFilter]);
 
   useEffect(() => {
     let isCancelled = false;
 
-    void actions.listProducts.execute({ activity: "active" }).then((result) => {
+    void actions.listProducts.execute({ activity: statusFilter }).then((result) => {
       if (isCancelled) return;
       setIsLoading(false);
       if (!result.ok) {
@@ -132,7 +132,15 @@ export function ProductManagementScreen({
     return () => {
       isCancelled = true;
     };
-  }, [actions.listProducts]);
+  }, [actions.listProducts, statusFilter]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => {
+      setMessage(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [message]);
 
   function openCreateForm() {
     setEditingProduct(null);
@@ -249,6 +257,19 @@ export function ProductManagementScreen({
     await loadProducts();
   }
 
+  async function handleReactivate(product: Product) {
+    if (!actions.reactivateProduct) return;
+    setIsReactivating(true);
+    setError(null);
+    const result = await actions.reactivateProduct.execute({ productId: product.id });
+    setIsReactivating(false);
+    if (!result.ok) {
+      setError(toUserMessage(result.error));
+      return;
+    }
+    await loadProducts();
+  }
+
   return (
     <div className="app-frame">
       <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
@@ -265,9 +286,17 @@ export function ProductManagementScreen({
         </header>
 
         {message && (
-          <p className="notice success" role="status">
-            {message}
-          </p>
+          <aside className="notice toast success" role="status">
+            <span>{message}</span>
+            <button
+              type="button"
+              className="toast-close"
+              onClick={() => setMessage(null)}
+              aria-label="Đóng thông báo"
+            >
+              ×
+            </button>
+          </aside>
         )}
         {error && (
           <p className="notice error" role="alert">
@@ -277,24 +306,11 @@ export function ProductManagementScreen({
 
         <section className="catalog-panel" aria-labelledby="catalog-title">
           <div className="panel-heading">
-            <div className="catalog-title-group">
-              <div className="catalog-title-row">
-                <h2 id="catalog-title">Danh sách sản phẩm</h2>
-                <div className="catalog-stats-badges" aria-label="Thống kê danh mục">
-                  <span className="stat-badge products" title="Số lượng sản phẩm đang quản lý">
-                    <strong>{products.length}</strong> sản phẩm
-                  </span>
-                  <span className="stat-badge units" title="Tổng số đơn vị tính đang hoạt động">
-                    <strong>{activeUnitCount}</strong> ĐVT
-                  </span>
-                  <span className="stat-badge categories" title="Số nhóm sản phẩm">
-                    <strong>{categories.length}</strong> nhóm
-                  </span>
-                </div>
-              </div>
-              <p>
-                {visibleProducts.length} trong {products.length} sản phẩm
-              </p>
+            <div className="catalog-title-row">
+              <h2 id="catalog-title">Danh sách sản phẩm</h2>
+              <span className="stat-badge products" aria-label="Số lượng sản phẩm">
+                <strong>{products.length}</strong> sản phẩm
+              </span>
             </div>
             <button
               className="refresh-button"
@@ -314,6 +330,19 @@ export function ProductManagementScreen({
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Tìm theo tên, mã, thương hiệu…"
               />
+            </label>
+            <label>
+              <span className="sr-only">Lọc theo trạng thái</span>
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as "active" | "inactive" | "all")
+                }
+              >
+                <option value="active">Đang bán</option>
+                <option value="inactive">Ngưng bán</option>
+                <option value="all">Tất cả trạng thái</option>
+              </select>
             </label>
             <label>
               <span className="sr-only">Lọc theo thương hiệu</span>
@@ -344,10 +373,16 @@ export function ProductManagementScreen({
             </p>
           ) : products.length === 0 ? (
             <div className="empty-state">
-              <strong>Chưa có sản phẩm</strong>
-              <button className="primary-button" type="button" onClick={openCreateForm}>
-                Thêm sản phẩm
-              </button>
+              <strong>
+                {statusFilter === "inactive"
+                  ? "Không có sản phẩm ngưng bán"
+                  : "Chưa có sản phẩm"}
+              </strong>
+              {statusFilter !== "inactive" && (
+                <button className="primary-button" type="button" onClick={openCreateForm}>
+                  Thêm sản phẩm
+                </button>
+              )}
             </div>
           ) : visibleProducts.length === 0 ? (
             <div className="empty-state">
@@ -425,34 +460,51 @@ export function ProductManagementScreen({
                         </div>
                       </td>
                       <td>
-                        <span className="status-badge">
+                        <span
+                          className={`status-badge ${product.isActive ? "active" : "inactive"}`}
+                        >
                           <i aria-hidden="true" />
-                          Đang bán
+                          {product.isActive ? "Đang bán" : "Ngưng bán"}
                         </span>
                       </td>
                       <td>
                         <div className="row-actions">
-                          <button
-                            className="icon-action"
-                            type="button"
-                            onClick={() => openEditForm(product)}
-                            aria-label={`Chỉnh sửa ${product.name}`}
-                            title="Chỉnh sửa"
-                          >
-                            <EditIcon />
-                          </button>
-                          <button
-                            className="icon-action danger-link"
-                            type="button"
-                            onClick={() => {
-                              setDeactivationError(null);
-                              setProductPendingDeactivation(product);
-                            }}
-                            aria-label={`Ngừng bán ${product.name}`}
-                            title="Ngừng bán"
-                          >
-                            <DeactivateIcon />
-                          </button>
+                          {product.isActive ? (
+                            <>
+                              <button
+                                className="icon-action"
+                                type="button"
+                                onClick={() => openEditForm(product)}
+                                aria-label={`Chỉnh sửa ${product.name}`}
+                                title="Chỉnh sửa"
+                              >
+                                <EditIcon />
+                              </button>
+                              <button
+                                className="icon-action danger-link"
+                                type="button"
+                                onClick={() => {
+                                  setDeactivationError(null);
+                                  setProductPendingDeactivation(product);
+                                }}
+                                aria-label={`Ngừng bán ${product.name}`}
+                                title="Ngừng bán"
+                              >
+                                <DeactivateIcon />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              className="reactivate-button"
+                              type="button"
+                              onClick={() => void handleReactivate(product)}
+                              disabled={isReactivating}
+                              aria-label={`Kích hoạt lại ${product.name}`}
+                              title="Kích hoạt lại"
+                            >
+                              Kích hoạt lại
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

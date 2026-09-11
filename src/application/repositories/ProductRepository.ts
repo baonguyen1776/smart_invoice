@@ -16,6 +16,7 @@ export interface ProductRepository {
   findById(productId: string): Promise<Result<Product | null, ProductPersistenceFailure>>;
   update(product: Product): Promise<Result<void, ProductRepositoryWriteError>>;
   deactivate(product: Product): Promise<Result<void, ProductPersistenceFailure>>;
+  reactivate(product: Product): Promise<Result<void, ProductPersistenceFailure>>;
   list(
     filter: ProductActivityFilter,
   ): Promise<Result<readonly Product[], ProductPersistenceFailure>>;

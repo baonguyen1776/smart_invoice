@@ -94,6 +94,18 @@ export class Product {
     });
   }
 
+  reactivate(updatedAt: string): Product {
+    if (this.isActive) {
+      return this;
+    }
+
+    return Product.fromState({
+      ...this.toState(),
+      isActive: true,
+      updatedAt,
+    });
+  }
+
   private static fromState(state: ProductState): Product {
     validateUuid(state.id, "id");
     validateTimestamp(state.createdAt, "createdAt");

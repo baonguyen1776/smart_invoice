@@ -14,6 +14,7 @@ export class InMemoryProductRepository implements ProductRepository {
   readonly createCalls: Product[] = [];
   readonly updateCalls: Product[] = [];
   readonly deactivateCalls: Product[] = [];
+  readonly reactivateCalls: Product[] = [];
 
   private readonly products = new Map<string, Product>();
   private readonly failures = new Map<ProductRepositoryOperation, ProductPersistenceFailure>();
@@ -69,6 +70,16 @@ export class InMemoryProductRepository implements ProductRepository {
   async deactivate(product: Product): Promise<Result<void, ProductPersistenceFailure>> {
     this.deactivateCalls.push(product);
     const failure = this.takeFailure("deactivate");
+
+    if (failure !== null) return err(failure);
+
+    this.products.set(product.id, product);
+    return ok(undefined);
+  }
+
+  async reactivate(product: Product): Promise<Result<void, ProductPersistenceFailure>> {
+    this.reactivateCalls.push(product);
+    const failure = this.takeFailure("reactivate");
 
     if (failure !== null) return err(failure);
 

@@ -190,6 +190,26 @@ describe("Product", () => {
     });
   });
 
+  describe("reactivate", () => {
+    it("returns an active Product from an inactive one and updates updatedAt", () => {
+      const product = Product.create(validProductInput).deactivate(UPDATED_AT);
+      const reactivatedAt = "2026-09-12T01:00:00.000Z";
+
+      const reactivatedProduct = product.reactivate(reactivatedAt);
+
+      expect(reactivatedProduct.isActive).toBe(true);
+      expect(reactivatedProduct.id).toBe(product.id);
+      expect(reactivatedProduct.updatedAt).toBe(reactivatedAt);
+      expect(product.isActive).toBe(false);
+    });
+
+    it("returns the same product if already active", () => {
+      const product = Product.create(validProductInput);
+      const reactivated = product.reactivate(UPDATED_AT);
+      expect(reactivated).toBe(product);
+    });
+  });
+
   describe("rehydrate", () => {
     it("restores a valid inactive Product", () => {
       const product = Product.rehydrate({

@@ -35,6 +35,7 @@ function makeActions(products: readonly Product[] = []): ProductManagementAction
     createProduct: { execute: vi.fn(async () => ok(makeProduct())) },
     updateProduct: { execute: vi.fn(async () => ok(makeProduct())) },
     deactivateProduct: { execute: vi.fn(async () => ok(makeProduct().deactivate(NOW))) },
+    reactivateProduct: { execute: vi.fn(async () => ok(makeProduct())) },
   };
 }
 
@@ -47,13 +48,16 @@ describe("ProductManagementScreen", () => {
     expect(screen.getByText(/85.000/)).toBeVisible();
   });
 
-  it("renders compact catalog stats badges in table header", async () => {
+  it("renders product count in table header", async () => {
     render(<ProductManagementScreen actions={makeActions([makeProduct()])} />);
-    const stats = await screen.findByLabelText("Thống kê danh mục");
-    expect(within(stats).getAllByText("1")).toHaveLength(3);
-    expect(within(stats).getByText(/sản phẩm/)).toBeVisible();
-    expect(within(stats).getByText(/ĐVT/)).toBeVisible();
-    expect(within(stats).getByText(/nhóm/)).toBeVisible();
+    await screen.findByText("CF-01");
+    const heading = screen
+      .getByRole("heading", { name: /Danh sách sản phẩm/ })
+      .closest<HTMLElement>(".panel-heading")!;
+    const countBadge = within(heading).getByLabelText("Số lượng sản phẩm");
+    expect(countBadge).toHaveTextContent("1 sản phẩm");
+    expect(within(heading).queryByText(/ĐVT/)).not.toBeInTheDocument();
+    expect(within(heading).queryByText(/nhóm/)).not.toBeInTheDocument();
   });
 
   it("submits a new Product through the Application action", async () => {
@@ -130,5 +134,31 @@ describe("ProductManagementScreen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể lưu dữ liệu");
     expect(screen.getByRole("alertdialog")).toBeVisible();
+  });
+
+  it("filters inactive products and reactivates an inactive product with 1 click", async () => {
+    const inactiveProduct = makeProduct().deactivate(NOW);
+    const actions = makeActions();
+    const listMock = vi.fn(async ({ activity }: { activity?: string } = {}) =>
+      ok(activity === "inactive" ? [inactiveProduct] : []),
+    );
+    actions.listProducts.execute = listMock;
+    const reactivateMock = vi.mocked(actions.reactivateProduct!.execute);
+
+    render(<ProductManagementScreen actions={actions} />);
+    await screen.findByText("Chưa có sản phẩm");
+
+    const statusSelect = screen.getByLabelText("Lọc theo trạng thái");
+    fireEvent.change(statusSelect, { target: { value: "inactive" } });
+
+    await waitFor(() => expect(listMock).toHaveBeenCalledWith({ activity: "inactive" }));
+    expect(await screen.findByText("Ngưng bán", { selector: ".status-badge" })).toBeVisible();
+
+    const reactivateBtn = screen.getByRole("button", { name: "Kích hoạt lại Cà phê rang xay" });
+    fireEvent.click(reactivateBtn);
+
+    await waitFor(() => expect(reactivateMock).toHaveBeenCalledWith({ productId: PRODUCT_ID }));
+    expect(listMock).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText(/Đã kích hoạt lại sản phẩm/)).not.toBeInTheDocument();
   });
 });
