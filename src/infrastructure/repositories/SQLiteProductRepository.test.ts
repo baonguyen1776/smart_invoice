@@ -106,9 +106,22 @@ describe("SQLiteProductRepository", () => {
     for (const result of [
       await repository.update(makeProduct()),
       await repository.deactivate(makeProduct()),
+      await repository.reactivate(makeProduct()),
     ]) {
       expect(result.ok).toBe(false);
       expect(JSON.stringify(result)).not.toContain("private_rows");
     }
+  });
+
+  it("sends reactivate_product command with mapped record DTO", async () => {
+    const commandInvoker = vi.fn<CommandInvoker>().mockResolvedValue(undefined);
+    const repository = new SQLiteProductRepository(commandInvoker);
+
+    const result = await repository.reactivate(makeProduct());
+
+    expect(result.ok).toBe(true);
+    expect(commandInvoker).toHaveBeenCalledWith("reactivate_product", {
+      product: expect.objectContaining({ id: PRODUCT_ID }),
+    });
   });
 });

@@ -3,6 +3,7 @@ export type ProductRepositoryOperation =
   | "get"
   | "update"
   | "deactivate"
+  | "reactivate"
   | "list"
   | "create_alias"
   | "remove_alias"

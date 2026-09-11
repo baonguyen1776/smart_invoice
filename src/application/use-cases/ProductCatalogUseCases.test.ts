@@ -5,6 +5,7 @@ import { CreateProduct } from "./CreateProduct";
 import { DeactivateProduct } from "./DeactivateProduct";
 import { GetProduct } from "./GetProduct";
 import { ListProducts } from "./ListProducts";
+import { ReactivateProduct } from "./ReactivateProduct";
 import { UpdateProduct } from "./UpdateProduct";
 import { Product } from "../../domain/entities/Product";
 import { Unit } from "../../domain/entities/Unit";
@@ -493,6 +494,53 @@ describe("Product catalog use cases", () => {
       expectErrorCode(result, "persistence");
       if (result.ok || result.error.code !== "persistence") return;
       expect(result.error.operation).toBe("deactivate");
+    });
+  });
+
+  describe("ReactivateProduct", () => {
+    it("reactivates and persists an inactive Product", async () => {
+      const inactiveProduct = makeProduct({ isActive: false });
+      const repository = new InMemoryProductRepository([inactiveProduct]);
+      const useCase = new ReactivateProduct(repository, fixedClock());
+
+      const result = await useCase.execute({ productId: PRODUCT_ID });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.isActive).toBe(true);
+      expect(repository.reactivateCalls).toHaveLength(1);
+    });
+
+    it("is idempotent when Product is already active", async () => {
+      const activeProduct = makeProduct({ isActive: true });
+      const repository = new InMemoryProductRepository([activeProduct]);
+      const useCase = new ReactivateProduct(repository, fixedClock());
+
+      const result = await useCase.execute({ productId: PRODUCT_ID });
+
+      expect(result.ok).toBe(true);
+      expect(repository.reactivateCalls).toHaveLength(0);
+    });
+
+    it("returns not_found for a missing Product", async () => {
+      const useCase = new ReactivateProduct(new InMemoryProductRepository(), fixedClock());
+
+      const result = await useCase.execute({ productId: PRODUCT_ID });
+
+      expectErrorCode(result, "not_found");
+    });
+
+    it("returns persistence context when reactivation fails", async () => {
+      const inactiveProduct = makeProduct({ isActive: false });
+      const repository = new InMemoryProductRepository([inactiveProduct]);
+      repository.failNext("reactivate", "reactivate unavailable");
+      const useCase = new ReactivateProduct(repository, fixedClock());
+
+      const result = await useCase.execute({ productId: PRODUCT_ID });
+
+      expectErrorCode(result, "persistence");
+      if (result.ok || result.error.code !== "persistence") return;
+      expect(result.error.operation).toBe("reactivate");
     });
   });
 });

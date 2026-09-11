@@ -73,6 +73,15 @@ export class SQLiteProductRepository implements ProductRepository {
     }
   }
 
+  async reactivate(product: Product): Promise<Result<void, ProductPersistenceFailure>> {
+    try {
+      await this.commandInvoker("reactivate_product", { product: toRecord(product) });
+      return ok(undefined);
+    } catch {
+      return err(mapPersistenceFailure("reactivate"));
+    }
+  }
+
   async list(
     filter: ProductActivityFilter,
   ): Promise<Result<readonly Product[], ProductPersistenceFailure>> {

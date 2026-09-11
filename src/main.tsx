@@ -9,6 +9,7 @@ import { CreateProduct } from "./application/use-cases/CreateProduct";
 import { DeactivateProduct } from "./application/use-cases/DeactivateProduct";
 import { ListProducts } from "./application/use-cases/ListProducts";
 import { LoadProductSearchIndex } from "./application/use-cases/LoadProductSearchIndex";
+import { ReactivateProduct } from "./application/use-cases/ReactivateProduct";
 import { SearchProducts } from "./application/use-cases/SearchProducts";
 import { UpdateProduct } from "./application/use-cases/UpdateProduct";
 import { SQLiteInvoiceRepository } from "./infrastructure/repositories/SQLiteInvoiceRepository";
@@ -45,6 +46,7 @@ const productActions = {
   createProduct: new CreateProduct(repository, idGenerator, clock, searchIndex),
   updateProduct: new UpdateProduct(repository, idGenerator, clock, searchIndex),
   deactivateProduct: new DeactivateProduct(repository, clock, searchIndex),
+  reactivateProduct: new ReactivateProduct(repository, clock, searchIndex),
   listProducts: new ListProducts(repository),
 };
 

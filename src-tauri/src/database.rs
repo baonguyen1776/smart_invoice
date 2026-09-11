@@ -180,6 +180,16 @@ pub async fn deactivate_product(
 }
 
 #[tauri::command]
+pub async fn reactivate_product(
+    state: State<'_, DatabaseState>,
+    product: ProductRecord,
+) -> Result<(), ProductCommandError> {
+    set_product_active(&state.0, &product.id, &product.updated_at)
+        .await
+        .map_err(|error| persistence("reactivate", error))
+}
+
+#[tauri::command]
 pub async fn list_products(
     state: State<'_, DatabaseState>,
     filter: String,
@@ -1117,6 +1127,22 @@ async fn set_product_inactive(
     Ok(())
 }
 
+async fn set_product_active(
+    pool: &SqlitePool,
+    product_id: &str,
+    updated_at: &str,
+) -> Result<(), sqlx::Error> {
+    let result = sqlx::query("UPDATE products SET is_active = 1, updated_at = ? WHERE id = ?")
+        .bind(updated_at)
+        .bind(product_id)
+        .execute(pool)
+        .await?;
+    if result.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    Ok(())
+}
+
 fn validate_product_alias(alias: &ProductAliasRecord) -> Result<(), ProductCommandError> {
     let optional_values_are_valid = [&alias.source_key, &alias.source_name_raw, &alias.unit_name]
         .into_iter()
@@ -1379,6 +1405,12 @@ mod tests {
                 .unwrap();
             assert!(fetch_products(&pool, Some(true)).await.unwrap().is_empty());
             assert_eq!(fetch_products(&pool, Some(false)).await.unwrap().len(), 1);
+
+            set_product_active(&pool, PRODUCT_ID, "2026-01-03T00:00:00.000Z")
+                .await
+                .unwrap();
+            assert_eq!(fetch_products(&pool, Some(true)).await.unwrap().len(), 1);
+            assert!(fetch_products(&pool, Some(false)).await.unwrap().is_empty());
         });
     }
 

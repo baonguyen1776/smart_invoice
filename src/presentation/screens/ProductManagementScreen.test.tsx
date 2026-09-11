@@ -35,6 +35,7 @@ function makeActions(products: readonly Product[] = []): ProductManagementAction
     createProduct: { execute: vi.fn(async () => ok(makeProduct())) },
     updateProduct: { execute: vi.fn(async () => ok(makeProduct())) },
     deactivateProduct: { execute: vi.fn(async () => ok(makeProduct().deactivate(NOW))) },
+    reactivateProduct: { execute: vi.fn(async () => ok(makeProduct())) },
   };
 }
 
@@ -130,5 +131,30 @@ describe("ProductManagementScreen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Không thể lưu dữ liệu");
     expect(screen.getByRole("alertdialog")).toBeVisible();
+  });
+
+  it("filters inactive products and reactivates an inactive product with 1 click", async () => {
+    const inactiveProduct = makeProduct().deactivate(NOW);
+    const actions = makeActions();
+    const listMock = vi.fn(async ({ activity }: { activity?: string } = {}) =>
+      ok(activity === "inactive" ? [inactiveProduct] : []),
+    );
+    actions.listProducts.execute = listMock;
+    const reactivateMock = vi.mocked(actions.reactivateProduct!.execute);
+
+    render(<ProductManagementScreen actions={actions} />);
+    await screen.findByText("Chưa có sản phẩm");
+
+    const statusSelect = screen.getByLabelText("Lọc theo trạng thái");
+    fireEvent.change(statusSelect, { target: { value: "inactive" } });
+
+    await waitFor(() => expect(listMock).toHaveBeenCalledWith({ activity: "inactive" }));
+    expect(await screen.findByText("Ngưng bán", { selector: ".status-badge" })).toBeVisible();
+
+    const reactivateBtn = screen.getByRole("button", { name: "Kích hoạt lại Cà phê rang xay" });
+    fireEvent.click(reactivateBtn);
+
+    await waitFor(() => expect(reactivateMock).toHaveBeenCalledWith({ productId: PRODUCT_ID }));
+    expect(await screen.findByText(/Đã kích hoạt lại sản phẩm/)).toBeVisible();
   });
 });

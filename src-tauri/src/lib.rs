@@ -10,6 +10,7 @@ pub fn run() {
             database::get_product,
             database::update_product,
             database::deactivate_product,
+            database::reactivate_product,
             database::list_products,
             database::create_product_alias,
             database::remove_product_alias,

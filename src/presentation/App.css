@@ -389,7 +389,7 @@ h2 {
 }
 .catalog-toolbar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 190px 170px;
+  grid-template-columns: minmax(200px, 1fr) 150px 170px 160px;
   gap: 10px;
   padding: 0 22px 18px;
 }
@@ -562,6 +562,29 @@ tbody tr {
   border-radius: 50%;
   background: var(--neon);
   box-shadow: 0 0 8px rgba(34, 211, 238, 0.72);
+}
+.status-badge.inactive {
+  color: var(--muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+.status-badge.inactive i {
+  background: var(--muted);
+  box-shadow: none;
+}
+.reactivate-button {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: var(--font-weight-strong);
+  border-radius: 6px;
+  color: var(--primary);
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+.reactivate-button:hover:not(:disabled) {
+  background: #dbeafe;
+  color: var(--primary-hover);
 }
 .row-actions {
   display: flex;
