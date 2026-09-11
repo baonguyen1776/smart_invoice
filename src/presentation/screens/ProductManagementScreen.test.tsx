@@ -48,13 +48,16 @@ describe("ProductManagementScreen", () => {
     expect(screen.getByText(/85.000/)).toBeVisible();
   });
 
-  it("renders compact catalog stats badges in table header", async () => {
+  it("renders product count in table header", async () => {
     render(<ProductManagementScreen actions={makeActions([makeProduct()])} />);
-    const stats = await screen.findByLabelText("Thống kê danh mục");
-    expect(within(stats).getAllByText("1")).toHaveLength(3);
-    expect(within(stats).getByText(/sản phẩm/)).toBeVisible();
-    expect(within(stats).getByText(/ĐVT/)).toBeVisible();
-    expect(within(stats).getByText(/nhóm/)).toBeVisible();
+    await screen.findByText("CF-01");
+    const heading = screen
+      .getByRole("heading", { name: /Danh sách sản phẩm/ })
+      .closest<HTMLElement>(".panel-heading")!;
+    const countBadge = within(heading).getByLabelText("Số lượng sản phẩm");
+    expect(countBadge).toHaveTextContent("1 sản phẩm");
+    expect(within(heading).queryByText(/ĐVT/)).not.toBeInTheDocument();
+    expect(within(heading).queryByText(/nhóm/)).not.toBeInTheDocument();
   });
 
   it("submits a new Product through the Application action", async () => {
@@ -155,6 +158,7 @@ describe("ProductManagementScreen", () => {
     fireEvent.click(reactivateBtn);
 
     await waitFor(() => expect(reactivateMock).toHaveBeenCalledWith({ productId: PRODUCT_ID }));
-    expect(await screen.findByText(/Đã kích hoạt lại sản phẩm/)).toBeVisible();
+    expect(listMock).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText(/Đã kích hoạt lại sản phẩm/)).not.toBeInTheDocument();
   });
 });

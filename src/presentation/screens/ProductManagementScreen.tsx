@@ -103,10 +103,6 @@ export function ProductManagementScreen({
       );
     });
   }, [brandFilter, categoryFilter, products, query]);
-  const activeUnitCount = products.reduce(
-    (total, product) => total + product.units.filter((unit) => unit.isActive).length,
-    0,
-  );
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
@@ -137,6 +133,14 @@ export function ProductManagementScreen({
       isCancelled = true;
     };
   }, [actions.listProducts, statusFilter]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => {
+      setMessage(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [message]);
 
   function openCreateForm() {
     setEditingProduct(null);
@@ -257,14 +261,12 @@ export function ProductManagementScreen({
     if (!actions.reactivateProduct) return;
     setIsReactivating(true);
     setError(null);
-    setMessage(null);
     const result = await actions.reactivateProduct.execute({ productId: product.id });
     setIsReactivating(false);
     if (!result.ok) {
       setError(toUserMessage(result.error));
       return;
     }
-    setMessage(`Đã kích hoạt lại sản phẩm “${product.name}”.`);
     await loadProducts();
   }
 
@@ -284,9 +286,17 @@ export function ProductManagementScreen({
         </header>
 
         {message && (
-          <p className="notice success" role="status">
-            {message}
-          </p>
+          <aside className="notice toast success" role="status">
+            <span>{message}</span>
+            <button
+              type="button"
+              className="toast-close"
+              onClick={() => setMessage(null)}
+              aria-label="Đóng thông báo"
+            >
+              ×
+            </button>
+          </aside>
         )}
         {error && (
           <p className="notice error" role="alert">
@@ -296,24 +306,11 @@ export function ProductManagementScreen({
 
         <section className="catalog-panel" aria-labelledby="catalog-title">
           <div className="panel-heading">
-            <div className="catalog-title-group">
-              <div className="catalog-title-row">
-                <h2 id="catalog-title">Danh sách sản phẩm</h2>
-                <div className="catalog-stats-badges" aria-label="Thống kê danh mục">
-                  <span className="stat-badge products" title="Số lượng sản phẩm đang quản lý">
-                    <strong>{products.length}</strong> sản phẩm
-                  </span>
-                  <span className="stat-badge units" title="Tổng số đơn vị tính đang hoạt động">
-                    <strong>{activeUnitCount}</strong> ĐVT
-                  </span>
-                  <span className="stat-badge categories" title="Số nhóm sản phẩm">
-                    <strong>{categories.length}</strong> nhóm
-                  </span>
-                </div>
-              </div>
-              <p>
-                {visibleProducts.length} trong {products.length} sản phẩm
-              </p>
+            <div className="catalog-title-row">
+              <h2 id="catalog-title">Danh sách sản phẩm</h2>
+              <span className="stat-badge products" aria-label="Số lượng sản phẩm">
+                <strong>{products.length}</strong> sản phẩm
+              </span>
             </div>
             <button
               className="refresh-button"
