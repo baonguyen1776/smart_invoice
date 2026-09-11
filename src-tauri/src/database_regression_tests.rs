@@ -334,7 +334,7 @@ fn numeric_guards_reject_fractional_values_on_insert_and_update() {
                 .await
                 .is_err());
         }
-        sqlx::query("INSERT INTO invoice_items VALUES('item', 'invoice', ?, ?, 'Coca Cola', NULL, NULL, 'Can', 2, 2, 4, ?)")
+        sqlx::query("INSERT INTO invoice_items (id, invoice_id, product_id, unit_id, product_name, product_sku, product_brand, unit_name, unit_price, quantity, subtotal, created_at) VALUES('item', 'invoice', ?, ?, 'Coca Cola', NULL, NULL, 'Can', 2, 2, 4, ?)")
             .bind(PRODUCT_ID).bind(UNIT_ID).bind(NOW).execute(&pool).await.unwrap();
         for statement in [
             "UPDATE invoice_items SET unit_price = 1.5, subtotal = 3",
@@ -393,6 +393,7 @@ fn invoice_item(id: &str, invoice_id: &str, product_id: &str, unit_id: &str) -> 
         unit_price: 10_000,
         quantity: 2,
         subtotal: 20_000,
+        discount_basis_points: 0,
         created_at: NOW.to_string(),
     }
 }
@@ -1085,5 +1086,113 @@ fn product_alias_migration_enforces_scope_and_preserves_ambiguity() {
         assert!(indexes
             .iter()
             .any(|name| name == "product_aliases_scoped_lookup_idx"));
+    });
+}
+
+#[test]
+fn upgrades_existing_invoice_rows_with_zero_discount() {
+    use sqlx::migrate::Migrate;
+    tauri::async_runtime::block_on(async {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1)
+            .connect_with(connection_options().in_memory(true)).await.unwrap();
+        {
+            let mut connection = pool.acquire().await.unwrap();
+            connection.ensure_migrations_table().await.unwrap();
+            for migration in sqlx::migrate!("./migrations").iter().take(3) {
+                connection.apply(migration).await.unwrap();
+            }
+        }
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+        insert_invoice_draft(&pool, CreateInvoiceDraftInput { id: INVOICE_ID.into(), created_at: NOW.into() }).await.unwrap();
+        sqlx::query("INSERT INTO invoice_items (id, invoice_id, product_id, unit_id, product_name, product_sku, product_brand, unit_name, unit_price, quantity, subtotal, created_at) VALUES (?, ?, ?, ?, 'Original snapshot', NULL, NULL, 'Can', 10000, 2, 20000, ?)")
+            .bind(ITEM_ID).bind(INVOICE_ID).bind(PRODUCT_ID).bind(UNIT_ID).bind(NOW).execute(&pool).await.unwrap();
+        sqlx::query("UPDATE invoices SET total=20000").execute(&pool).await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let invoice = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(invoice.total, 20_000);
+        assert_eq!(invoice.items[0].discount_basis_points, 0);
+        assert_eq!(invoice.items[0].product_name, "Original snapshot");
+        for value in ["-1", "10001", "0.5", "'invalid'"] {
+            assert!(sqlx::query(&format!("UPDATE invoice_items SET discount_basis_points={value}"))
+                .execute(&pool).await.is_err());
+        }
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+    });
+}
+
+#[test]
+fn discounts_survive_reopen_completion_and_overwrite_and_reject_inconsistent_totals() {
+    tauri::async_runtime::block_on(async {
+        let file = TestDatabaseFile::new();
+        let pool = open_database(file.options()).await.unwrap();
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+        let mut invoice = insert_invoice_draft(&pool, CreateInvoiceDraftInput { id: INVOICE_ID.into(), created_at: NOW.into() }).await.unwrap();
+        let mut item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        item.quantity = 1;
+        item.unit_price = 105;
+        item.subtotal = 105;
+        item.discount_basis_points = 1000;
+        invoice.items.push(item);
+        invoice.total = 94;
+        persist_draft_items_and_total(&pool, invoice).await.unwrap();
+        pool.close().await;
+        let pool = open_database(file.options()).await.unwrap();
+        let mut invoice = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(invoice.total, 94);
+        assert_eq!(invoice.items[0].discount_basis_points, 1000);
+        let mut invalid = invoice.clone();
+        invalid.total = 95;
+        assert!(persist_draft_items_and_total(&pool, invalid).await.is_err());
+        invoice.status = "completed".into();
+        invoice.completed_at = Some(NOW.into());
+        persist_completed_invoice(&pool, invoice.clone()).await.unwrap();
+        invoice.items[0].discount_basis_points = 10000;
+        invoice.total = 0;
+        persist_overwrite_completed(&pool, invoice).await.unwrap();
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.total, 0);
+        assert_eq!(loaded.items[0].discount_basis_points, 10000);
+        assert_eq!(loaded.completed_at.as_deref(), Some(NOW));
+        pool.close().await;
+    });
+}
+
+#[test]
+fn discount_rounding_is_exact_at_safe_integer_limit_and_checks_gross_overflow() {
+    let mut item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+    item.quantity = 1;
+    item.unit_price = MAX_SAFE_INTEGER;
+    item.subtotal = MAX_SAFE_INTEGER;
+    item.discount_basis_points = 5000;
+    assert_eq!(calculate_and_validate_total(&[item.clone()], 4_503_599_627_370_495).unwrap(), 4_503_599_627_370_495);
+    item.discount_basis_points = 10000;
+    assert!(calculate_and_validate_total(&[item.clone(), item], 0).is_err());
+}
+
+#[test]
+fn lists_invoices_filtered_by_status() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.to_string(),
+                created_at: NOW.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let drafts = fetch_invoices(&pool, Some("draft")).await.unwrap();
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(drafts[0].id, INVOICE_ID);
+        assert_eq!(drafts[0].status, "draft");
+
+        let completed = fetch_invoices(&pool, Some("completed")).await.unwrap();
+        assert_eq!(completed.len(), 0);
+
+        let all = fetch_invoices(&pool, None).await.unwrap();
+        assert_eq!(all.len(), 1);
+        pool.close().await;
     });
 }
