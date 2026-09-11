@@ -1,3 +1,4 @@
+import { sumInvoiceAmounts } from "../rules/CalculateInvoiceAmounts";
 import { InvoiceItem } from "./InvoiceItem";
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -138,7 +139,7 @@ export class Invoice {
 
     const total = calculateTotal(state.items);
     if (state.total !== total) {
-      throw new InvoiceValidationError("total must equal the sum of item subtotals.");
+      throw new InvoiceValidationError("total must equal the sum of item payments.");
     }
 
     if (state.status === "completed" && state.items.length === 0) {
@@ -168,14 +169,11 @@ function validateItems(invoiceId: string, items: readonly InvoiceItem[]): void {
 }
 
 function calculateTotal(items: readonly InvoiceItem[]): number {
-  let total = 0;
-  for (const item of items) {
-    total += item.subtotal;
-    if (!Number.isSafeInteger(total)) {
-      throw new InvoiceValidationError("Invoice total must be a non-negative safe integer.");
-    }
+  try {
+    return sumInvoiceAmounts(items).payment;
+  } catch {
+    throw new InvoiceValidationError("Invoice total must be a non-negative safe integer.");
   }
-  return total;
 }
 
 function validateUuid(value: string): void {
