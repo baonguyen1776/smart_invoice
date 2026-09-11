@@ -25,6 +25,31 @@ describe("Invoice discounts", () => {
     const line = calculateInvoiceLineAmounts(1, Number.MAX_SAFE_INTEGER, 10000);
     expect(() => sumInvoiceAmounts([line, line])).toThrow();
   });
+  it("supports negative quantity return lines and calculates symmetrical discount and payment", () => {
+    const returnLine = calculateInvoiceLineAmounts(-10, 3700, 1000);
+    expect(returnLine).toEqual({ subtotal: -37000, discountAmount: -3700, payment: -33300 });
+
+    const salesLine = calculateInvoiceLineAmounts(2, 50000, 0);
+    expect(sumInvoiceAmounts([salesLine, returnLine])).toEqual({
+      subtotal: 63000,
+      discountAmount: -3700,
+      payment: 66700,
+    });
+
+    // Standalone return produces negative total
+    expect(sumInvoiceAmounts([returnLine])).toEqual({
+      subtotal: -37000,
+      discountAmount: -3700,
+      payment: -33300,
+    });
+  });
+
+  it("rejects zero quantity or unsafe integers", () => {
+    expect(() => calculateInvoiceLineAmounts(0, 1000)).toThrow(/non-zero safe integer/);
+    expect(() => calculateInvoiceLineAmounts(1.5, 1000)).toThrow(/non-zero safe integer/);
+    expect(() => calculateInvoiceLineAmounts(-1.5, 1000)).toThrow(/non-zero safe integer/);
+  });
+
   it("parses exact percent precision with Vietnamese or decimal separators", () => {
     expect(parseDiscountPercent("12,50")).toBe(1250);
     expect(parseDiscountPercent("0.01")).toBe(1);

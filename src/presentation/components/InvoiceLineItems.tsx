@@ -54,7 +54,11 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
     const order = typeof left === "string" && typeof right === "string" ? left.localeCompare(right, "vi", { numeric: true }) : Number(left) - Number(right);
     return sort.direction === "ascending" ? order : -order;
   });
-  const money = (value?: number) => value === undefined ? "-" : value.toLocaleString("vi-VN");
+  const money = (value?: number) => {
+    if (value === undefined) return "-";
+    if (value < 0) return `(${Math.abs(value).toLocaleString("vi-VN")})`;
+    return value.toLocaleString("vi-VN");
+  };
 
   const { totalSubtotal, totalDiscount, totalPayment } = rows.reduce(
     (acc, row) => {
@@ -105,8 +109,8 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
             const numericInput = (field: "quantity" | "unitPrice" | "discount", label: string) => <input
               className="invoice-grid-input invoice-grid-number" data-grid-cell="true" data-dirty={row.isDirty}
               aria-label={`${label} dòng ${row.number}`} aria-invalid={Boolean(row.error)}
-              type={field === "discount" ? "text" : "number"} inputMode={field === "discount" ? "decimal" : "numeric"}
-              min={field === "quantity" ? 1 : 0} max={field === "discount" ? 100 : Number.MAX_SAFE_INTEGER} step={field === "discount" ? undefined : 1}
+              type={field === "discount" ? "text" : "number"} inputMode={field === "discount" ? "decimal" : field === "quantity" ? "text" : "numeric"}
+              min={field === "quantity" ? -Number.MAX_SAFE_INTEGER : 0} max={field === "discount" ? 100 : Number.MAX_SAFE_INTEGER} step={field === "discount" ? undefined : 1}
               placeholder="-" value={values[field]}
               onFocus={(event) => event.currentTarget.select()}
               onChange={(event) => grid.change(row.id, { ...values, [field]: event.target.value })}
@@ -151,10 +155,10 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
         <tfoot>
           <tr className="invoice-grid-total-row">
             <td colSpan={5} className="grid-total-label">Tổng Cộng</td>
-            <td className="grid-amount"><span>{totalSubtotal > 0 ? totalSubtotal.toLocaleString("vi-VN") : "-"}</span></td>
+            <td className="grid-amount"><span>{totalSubtotal !== 0 ? (totalSubtotal < 0 ? `(${Math.abs(totalSubtotal).toLocaleString("vi-VN")})` : totalSubtotal.toLocaleString("vi-VN")) : "-"}</span></td>
             <td className="grid-total-empty"></td>
-            <td className="grid-amount"><span>{totalDiscount > 0 ? totalDiscount.toLocaleString("vi-VN") : "-"}</span></td>
-            <td className="grid-amount grid-payment" role="complementary" aria-label="Tổng quan hóa đơn"><span>{totalPayment > 0 ? `${totalPayment.toLocaleString("vi-VN")} ₫` : "-"}</span></td>
+            <td className="grid-amount"><span>{totalDiscount !== 0 ? (totalDiscount < 0 ? `(${Math.abs(totalDiscount).toLocaleString("vi-VN")})` : totalDiscount.toLocaleString("vi-VN")) : "-"}</span></td>
+            <td className="grid-amount grid-payment" role="complementary" aria-label="Tổng quan hóa đơn"><span>{totalPayment !== 0 ? (totalPayment < 0 ? `(${Math.abs(totalPayment).toLocaleString("vi-VN")} ₫)` : `${totalPayment.toLocaleString("vi-VN")} ₫`) : "-"}</span></td>
             <td className="grid-total-empty"></td>
           </tr>
         </tfoot>

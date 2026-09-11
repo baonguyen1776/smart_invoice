@@ -233,7 +233,7 @@ describe("Invoice spreadsheet", () => {
     );
   });
 
-  it.each(["", "0", "-1", "1.5", "9007199254740992"])(
+  it.each(["", "0", "1.5", "-1.5", "abc", "9007199254740992", "-9007199254740992"])(
     "rejects invalid quantity %s without saving",
     async (value) => {
       const { actions } = populated();
@@ -243,6 +243,19 @@ describe("Invoice spreadsheet", () => {
       expect(actions.applyInvoiceItemChange.execute).not.toHaveBeenCalled();
     },
   );
+
+  it("accepts negative quantity for return items and formats parenthesized negative amounts", async () => {
+    const { actions, repository } = populated();
+    await ready(actions);
+    fireEvent.blur(edit("Số lượng dòng 1", "-2"));
+    await waitFor(() =>
+      expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].quantity).toBe(-2),
+    );
+    expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].subtotal).toBe(-58000);
+    expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent(
+      "(58.000 ₫)",
+    );
+  });
 
   it.each(["-1", "100.01", "1.234", "abc", "1e1"])("rejects invalid CK %s", async (value) => {
     const { actions } = populated();

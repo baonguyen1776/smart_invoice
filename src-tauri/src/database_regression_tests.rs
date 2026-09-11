@@ -1196,3 +1196,70 @@ fn lists_invoices_filtered_by_status() {
         pool.close().await;
     });
 }
+
+#[test]
+fn negative_quantity_return_lines_persist_and_recalculate_totals_correctly() {
+    tauri::async_runtime::block_on(async {
+        let file = TestDatabaseFile::new();
+        let pool = open_database(file.options()).await.unwrap();
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true)
+            .await
+            .unwrap();
+
+        // 1. Standalone credit invoice (net negative total)
+        let mut invoice = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.into(),
+                created_at: NOW.into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut return_item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        return_item.quantity = -10;
+        return_item.unit_price = 3_700;
+        return_item.subtotal = -37_000;
+        return_item.discount_basis_points = 1_000; // 10%
+        // payment = -37_000 - (-3_700) = -33_300
+        invoice.items.push(return_item);
+        invoice.total = -33_300;
+
+        persist_draft_items_and_total(&pool, invoice).await.unwrap();
+
+        // Reopen and verify persistence of negative quantity and total
+        pool.close().await;
+        let pool = open_database(file.options()).await.unwrap();
+        let fetched = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(fetched.total, -33_300);
+        assert_eq!(fetched.items.len(), 1);
+        assert_eq!(fetched.items[0].quantity, -10);
+        assert_eq!(fetched.items[0].subtotal, -37_000);
+        assert_eq!(fetched.items[0].discount_basis_points, 1_000);
+
+        // 2. Quantity = 0 is rejected
+        let mut zero_qty_item = invoice_item("66666666-6666-4666-8666-666666666666", INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        zero_qty_item.quantity = 0;
+        zero_qty_item.subtotal = 0;
+        assert!(calculate_and_validate_total(&[zero_qty_item], 0).is_err());
+
+        // 3. Mixed positive and negative items calculate correctly
+        let mut item_positive = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        item_positive.quantity = 2;
+        item_positive.unit_price = 50_000;
+        item_positive.subtotal = 100_000;
+        item_positive.discount_basis_points = 0;
+
+        let mut item_negative = invoice_item("77777777-7777-4777-8777-777777777777", INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        item_negative.quantity = -10;
+        item_negative.unit_price = 3_700;
+        item_negative.subtotal = -37_000;
+        item_negative.discount_basis_points = 1_000; // discount = -3_700, payment = -33_300
+
+        let mixed_total = calculate_and_validate_total(&[item_positive, item_negative], 66_700).unwrap();
+        assert_eq!(mixed_total, 66_700);
+
+        pool.close().await;
+    });
+}

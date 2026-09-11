@@ -25,8 +25,9 @@ Solo Kanban-Scrum hybrid — no team ceremonies, tight feedback loop.
 - **No inventory quantity tracking, no Supplier entity** (per `docs/architecture.md`).
 - **Domain identifiers:** UUID v4 strings for Product, Unit, Invoice, and
   InvoiceItem; invoices also receive a positive user-facing integer number.
-- **Money and quantity:** non-negative integer VND money and positive-integer
-  invoice quantity; persisted floating-point money is forbidden.
+- **Money and quantity:** integer VND money and non-zero integer invoice
+  quantity (positive for sales, negative for returns/deductions per Issue #28);
+  persisted floating-point money is forbidden.
 - **Catalog identity:** duplicate Product names remain valid; optional SKU,
   brand, and category disambiguate products. Product and Unit removal is soft
   deactivation.
@@ -124,6 +125,7 @@ where business logic lives, how DB migrations work, and what agents must not tou
 - [x] UX-003 Inline price edit (VIP override)
 - [x] UX-004 Total amount calculation
 - [x] UX-005 Draft auto-save on semantic events (add item / edit quantity / edit price / remove item) — debounced, not on every keystroke
+- [x] UX-008 Allow negative-quantity return/deduction lines in invoices (Issue #28)
 - [ ] UX-006 Complete Invoice (status draft → completed)
 - [ ] UX-007 Edit a completed invoice: confirmation dialog, then overwrite on save (confirmed decision — kept in MVP)
 

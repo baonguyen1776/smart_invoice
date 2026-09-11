@@ -135,6 +135,28 @@ nearest-rank sample.
 | Save Draft Items | 50 | 100 | 1.026 | 1.229 | 1.435 | ≤150 ms |
 | Save Draft Items | 100 | 100 | 1.814 | 1.944 | 2.209 | ≤300 ms P95 |
 
+## #28 — Allow negative-quantity return/deduction lines in invoices
+
+[Issue #28](https://github.com/baonguyen1776/smart_invoice/issues/28) — implementation and verification checks passed on 2026-09-12.
+
+- **Business Capability & Accounting Convention**:
+  - Wholesale customer goods returns and credit deductions are supported by entering a negative integer quantity (e.g. `-10`).
+  - Subtotal, discount amount, payment, and overall invoice total can be negative (credit balance).
+  - Negative amounts in the invoice table and totals footer are formatted using Vietnamese accounting convention with parentheses, e.g. `(37.000 ₫)` or `(3.700 ₫)`.
+  - Zero quantity remains strictly rejected (`quantity === 0` is invalid).
+- **5-Layer Architecture Updates**:
+  1. **SQLite Migration (`0005_allow_negative_quantity.sql`)**: Rebuilds `invoices` and `invoice_items` to widen `CHECK` constraints on `quantity` (`BETWEEN -9007199254740991 AND -1 OR BETWEEN 1 AND 9007199254740991`), `subtotal` (`BETWEEN -9007199254740991 AND 9007199254740991`), and `total` (`BETWEEN -9007199254740991 AND 9007199254740991`). Dropping sequence prevents cascade deletion of child items under foreign keys.
+  2. **Rust Backend (`database.rs`)**: In `calculate_and_validate_total`, permits negative subtotals, validates non-zero safe integers, and applies symmetric half-away-from-zero rounding for discounts on negative lines (`(raw + 5000) / 10000` for positive, `(raw - 5000) / 10000` for negative).
+  3. **Domain Layer (`InvoiceItem.ts`, `Invoice.ts`)**: `InvoiceItem` validates `quantity !== 0` within safe integer range. `Invoice.calculateTotal` allows signed totals within safe integer bounds.
+  4. **Domain Rules (`CalculateInvoiceAmounts.ts`)**: `calculateInvoiceLineAmounts` and `sumInvoiceAmounts` symmetrically compute signed subtotals, discounts, and payments with exact `BigInt` arithmetic.
+  5. **Presentation Layer (`useInvoiceGrid.ts`, `InvoiceLineItems.tsx`)**: Input regex `/^-?\d+$/` allows negative quantities; grid input accepts negative numbers; table cells and summary footer render parenthesized negative amounts.
+- **Verification Evidence**:
+  - TypeScript & ESLint: 0 errors, 0 warnings.
+  - Vitest: 185/185 tests pass across 16 files (added negative quantity unit tests in `CalculateInvoiceAmounts.test.ts`, `InvoiceItem.test.ts`, `Invoice.test.ts`, and `CreateInvoiceScreen.test.tsx`).
+  - Rust: 33/33 tests pass (added `negative_quantity_return_lines_persist_and_recalculate_totals_correctly` in `database_regression_tests.rs`).
+  - Clippy & fmt: clean (`cargo clippy --all-targets -- -D warnings`).
+  - Release Benchmark: `invoice_draft_benchmark` passes NFR-PERF-007 budget in 0.37s.
+
 ## Run checks
 
 From the repository root; native smoke requires a graphical desktop, creates an isolated profile and times out after 30 seconds per process.

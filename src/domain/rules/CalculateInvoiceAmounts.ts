@@ -9,16 +9,19 @@ export function calculateInvoiceLineAmounts(
   unitPrice: number,
   discountBasisPoints = 0,
 ): InvoiceLineAmounts {
-  if (!Number.isSafeInteger(quantity) || quantity < 1)
-    throw new Error("quantity must be a positive safe integer.");
+  if (!Number.isSafeInteger(quantity) || quantity === 0)
+    throw new Error("quantity must be a non-zero safe integer.");
   if (!Number.isSafeInteger(unitPrice) || unitPrice < 0)
     throw new Error("unitPrice must be a non-negative safe integer.");
   if (!Number.isInteger(discountBasisPoints) || discountBasisPoints < 0 || discountBasisPoints > 10_000)
     throw new Error("discountBasisPoints must be an integer from 0 to 10000.");
   const subtotal = quantity * unitPrice;
   if (!Number.isSafeInteger(subtotal)) throw new Error("subtotal exceeds the safe integer range.");
-  // BigInt keeps half-up VND rounding exact even near the safe-integer limit.
-  const discountAmount = Number((BigInt(subtotal) * BigInt(discountBasisPoints) + 5_000n) / 10_000n);
+  // BigInt keeps half-away-from-zero VND rounding exact even near the safe-integer limit.
+  const rawDiscount = BigInt(subtotal) * BigInt(discountBasisPoints);
+  const discountAmount = Number(
+    (rawDiscount >= 0n ? rawDiscount + 5_000n : rawDiscount - 5_000n) / 10_000n,
+  );
   return { subtotal, discountAmount, payment: subtotal - discountAmount };
 }
 
@@ -39,7 +42,8 @@ export function sumInvoiceAmounts(lines: readonly InvoiceLineAmounts[]): Invoice
     discountAmount += BigInt(line.discountAmount);
     payment += BigInt(line.payment);
   }
-  if ([subtotal, discountAmount, payment].some((amount) => amount > BigInt(Number.MAX_SAFE_INTEGER)))
+  const max = BigInt(Number.MAX_SAFE_INTEGER);
+  if ([subtotal, discountAmount, payment].some((amount) => amount < -max || amount > max))
     throw new Error("Invoice amounts exceed the safe integer range.");
   return { subtotal: Number(subtotal), discountAmount: Number(discountAmount), payment: Number(payment) };
 }

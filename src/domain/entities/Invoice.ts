@@ -172,7 +172,7 @@ function calculateTotal(items: readonly InvoiceItem[]): number {
   try {
     return sumInvoiceAmounts(items).payment;
   } catch {
-    throw new InvoiceValidationError("Invoice total must be a non-negative safe integer.");
+    throw new InvoiceValidationError("Invoice total exceeds the safe integer range.");
   }
 }
 

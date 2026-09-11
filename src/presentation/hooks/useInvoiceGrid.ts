@@ -42,8 +42,8 @@ export function invoiceRowValues(item?: InvoiceItem): InvoiceRowValues {
 function rowInput(values: InvoiceRowValues) {
   if (!values.selection || values.name !== values.selection.productName)
     throw new Error("Chọn hàng hóa từ danh mục.");
-  if (!/^\d+$/.test(values.quantity) || Number(values.quantity) < 1)
-    throw new Error("Số lượng phải là số nguyên từ 1 trở lên.");
+  if (!/^-?\d+$/.test(values.quantity) || Number(values.quantity) === 0)
+    throw new Error("Số lượng phải là số nguyên khác 0.");
   if (!/^\d+$/.test(values.unitPrice)) throw new Error("Đơn giá phải là số nguyên VND từ 0 trở lên.");
   const quantity = Number(values.quantity);
   const unitPrice = Number(values.unitPrice);
