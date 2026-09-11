@@ -47,6 +47,15 @@ describe("ProductManagementScreen", () => {
     expect(screen.getByText(/85.000/)).toBeVisible();
   });
 
+  it("renders compact catalog stats badges in table header", async () => {
+    render(<ProductManagementScreen actions={makeActions([makeProduct()])} />);
+    const stats = await screen.findByLabelText("Thống kê danh mục");
+    expect(within(stats).getAllByText("1")).toHaveLength(3);
+    expect(within(stats).getByText(/sản phẩm/)).toBeVisible();
+    expect(within(stats).getByText(/ĐVT/)).toBeVisible();
+    expect(within(stats).getByText(/nhóm/)).toBeVisible();
+  });
+
   it("submits a new Product through the Application action", async () => {
     const actions = makeActions();
     const create = vi.mocked(actions.createProduct.execute);
