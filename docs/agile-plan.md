@@ -129,6 +129,8 @@ where business logic lives, how DB migrations work, and what agents must not tou
 - [ ] UX-009 UI Refactoring & Design System: standardize buttons, colors, and polish overall interface (Issue #35)
 - [x] UX-006 Complete Invoice (status draft → completed) (Issue #19)
 - [x] UX-007 Edit a completed invoice: confirmation dialog, then overwrite on save (Issue #19)
+- [ ] UX-010 Receipt print preview modal upon invoice completion (Issue #37)
+- [ ] UX-011 Dedicated Invoice History screen with search and detail view (Issue #38)
 
 ## Sprint 4 — Printing (2-3 days)
 
