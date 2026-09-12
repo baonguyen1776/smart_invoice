@@ -1,0 +1,411 @@
+/* Receipt Print Preview Modal - Store THU BA Layout */
+
+.receipt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.receipt-modal-dialog {
+  background: var(--surface, #ffffff);
+  border-radius: 12px;
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.25),
+    0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 960px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  overflow: hidden;
+}
+
+/* Modal Toolbar */
+.receipt-modal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: var(--surface-raised, #f8fafc);
+  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+  flex-shrink: 0;
+}
+
+.receipt-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.receipt-toolbar-left h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+}
+
+.receipt-invoice-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--brand-primary, #2563eb);
+  background: var(--brand-primary-soft, #eff6ff);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+
+.receipt-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.receipt-toolbar-actions kbd {
+  display: inline-block;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+.btn-receipt-new-draft {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-receipt-new-draft kbd {
+  background: var(--surface-sunken, #e2e8f0);
+  color: var(--text-secondary, #475569);
+}
+
+.btn-receipt-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  background-color: #2563eb;
+  color: #ffffff;
+  border-radius: 6px;
+  border: none;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+  transition: background-color 0.15s ease;
+}
+
+.btn-receipt-print:hover {
+  background-color: #1d4ed8;
+}
+
+.btn-receipt-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-receipt-close:hover {
+  background: var(--surface-sunken, #e2e8f0);
+  color: var(--text-primary, #0f172a);
+}
+
+/* Scroll Area for Invoice Paper */
+.receipt-paper-scroll {
+  padding: 1.5rem;
+  overflow-y: auto;
+  background: #f1f5f9;
+  display: flex;
+  justify-content: center;
+}
+
+/* Physical Paper Simulation: THU BA Template */
+.thu-ba-invoice-paper {
+  width: 100%;
+  max-width: 860px;
+  background: #ffffff;
+  color: #000000;
+  font-family: "Times New Roman", Times, serif;
+  padding: 24px 32px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+}
+
+/* Header */
+.thu-ba-header {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.store-name {
+  font-size: 28px;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.store-address,
+.store-phone {
+  font-size: 15px;
+  font-style: italic;
+  font-weight: bold;
+  margin: 3px 0;
+}
+
+.invoice-title {
+  font-size: 26px;
+  font-weight: bold;
+  margin: 10px 0 8px;
+  letter-spacing: 0.06em;
+}
+
+/* Customer & Metadata */
+.customer-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.customer-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.customer-row-label {
+  min-width: 95px;
+  flex-shrink: 0;
+}
+
+.customer-row-val {
+  font-weight: normal;
+  padding-right: 8px;
+}
+
+.customer-row-line {
+  flex: 1;
+  border-bottom: 1px dotted #888888;
+  height: 14px;
+}
+
+.receipt-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13.5px;
+  font-weight: normal;
+  color: #333333;
+  margin-top: 4px;
+}
+
+/* 9-Column Table Layout */
+.thu-ba-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+
+.thu-ba-table th,
+.thu-ba-table td {
+  border: 1px solid #000000;
+  padding: 5px 6px;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+/* Yellow Header */
+.thu-ba-table thead th {
+  background-color: #ffff00;
+  font-weight: bold;
+  text-align: center;
+  padding: 7px 4px;
+}
+
+.th-stt {
+  width: 36px;
+}
+.th-name {
+  width: 30%;
+  text-align: center;
+}
+.th-unit {
+  width: 50px;
+}
+.th-qty {
+  width: 60px;
+  line-height: 1.15;
+}
+.th-price {
+  width: 80px;
+}
+.th-subtotal {
+  width: 90px;
+}
+.th-ck {
+  width: 44px;
+}
+.th-ck-amount {
+  width: 75px;
+}
+.th-payment {
+  width: 100px;
+}
+
+/* Table Body Cells */
+.thu-ba-table tbody td {
+  height: 23px;
+}
+
+.td-stt {
+  text-align: center;
+}
+.td-name {
+  text-align: left;
+}
+.td-unit {
+  text-align: center;
+}
+.td-qty {
+  text-align: right;
+}
+.td-price {
+  text-align: right;
+}
+.td-subtotal {
+  text-align: right;
+}
+.td-ck {
+  text-align: center;
+}
+.td-ck-amount {
+  text-align: right;
+}
+.td-payment {
+  text-align: right;
+}
+
+.item-product-name {
+  font-weight: 500;
+}
+
+.item-line-note {
+  font-size: 12px;
+  font-style: italic;
+  color: #444444;
+  display: block;
+  margin-top: 1px;
+}
+
+.empty-row td {
+  color: #666666;
+}
+
+/* Footer / Total Row */
+.thu-ba-total-row td {
+  background-color: #ffff00;
+  font-weight: bold;
+  padding: 7px 6px;
+}
+
+.td-total-label {
+  text-align: center;
+  font-size: 15.5px;
+}
+
+.td-ck-white {
+  background-color: #ffffff !important;
+  border: 1px solid #000000;
+}
+
+.td-total-payment {
+  font-size: 15px;
+  font-weight: bold;
+}
+
+/* Print Styles */
+@media print {
+  @page {
+    size: A5 landscape;
+    margin: 6mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .thu-ba-invoice-paper,
+  .thu-ba-invoice-paper * {
+    visibility: visible;
+  }
+
+  .receipt-modal-backdrop {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    inset: auto !important;
+  }
+
+  .receipt-modal-dialog {
+    position: static !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .receipt-paper-scroll {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .thu-ba-invoice-paper {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

@@ -15,6 +15,7 @@ import type { Invoice } from "../../domain/entities/Invoice";
 import { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import { InvoiceIcon } from "../components/InvoiceIcon";
 import { InvoiceLineItems } from "../components/InvoiceLineItems";
+import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewModal";
 import "./CreateInvoiceScreen.css";
 
 export interface InvoiceScreenActions {
@@ -99,6 +100,7 @@ export function CreateInvoiceScreen({
   const [completedInvoices, setCompletedInvoices] = useState<readonly Invoice[]>([]);
   const [invoicesTab, setInvoicesTab] = useState<"drafts" | "completed">("drafts");
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [originalCompletedInvoice, setOriginalCompletedInvoice] = useState<Invoice | null>(null);
   const [hasStagedChanges, setHasStagedChanges] = useState(false);
   const [isConfirmOverwriteOpen, setIsConfirmOverwriteOpen] = useState(false);
@@ -353,6 +355,7 @@ export function CreateInvoiceScreen({
           );
           onCompleteInvoice?.(result.value);
           void refreshInvoices();
+          setIsReceiptModalOpen(true);
         } else {
           const message =
             "message" in result.error && typeof result.error.message === "string"
@@ -367,6 +370,7 @@ export function CreateInvoiceScreen({
           // ignore
         }
         onCompleteInvoice?.(invoice);
+        setIsReceiptModalOpen(true);
       }
     } catch {
       setErrorMessage("Không thể hoàn thành hóa đơn.");
@@ -751,7 +755,7 @@ export function CreateInvoiceScreen({
                   type="button"
                   className="primary-button btn-print-completed"
                   onClick={() => {
-                    window.print();
+                    setIsReceiptModalOpen(true);
                   }}
                 >
                   <InvoiceIcon name="receipt" size={16} />
@@ -1046,6 +1050,20 @@ export function CreateInvoiceScreen({
             </div>
           </div>
         )}
+        <InvoiceReceiptPreviewModal
+          invoice={invoice}
+          customer={{
+            name: customerName,
+            phone: customerPhone,
+            note: customerNote,
+          }}
+          isOpen={isReceiptModalOpen}
+          onClose={() => setIsReceiptModalOpen(false)}
+          onNewDraft={() => {
+            setIsReceiptModalOpen(false);
+            void handleCreateNewDraft();
+          }}
+        />
       </main>
     </div>
   );
