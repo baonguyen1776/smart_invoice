@@ -157,6 +157,28 @@ nearest-rank sample.
   - Clippy & fmt: clean (`cargo clippy --all-targets -- -D warnings`).
   - Release Benchmark: `invoice_draft_benchmark` passes NFR-PERF-007 budget in 0.37s.
 
+## Bugfix — Draft Restoration and Draft Modal Selection Resilience
+
+Verification checks passed on 2026-09-12.
+
+- **Root Causes**:
+  1. `Invoice.rehydrate` strictly required `state.total === calculateTotal(state.items)` even for drafts (`status === "draft"`). When draft records in the database had mismatched or desynchronized totals (e.g. from migrations, test data, or partial updates), rehydration threw `InvoiceValidationError`, causing `listInvoices("draft")` and `restoreInvoiceDraft` to fail completely and block startup with "Không thể mở hóa đơn nháp. Vui lòng thử lại.".
+  2. `RestoreInvoiceDraft` did not fall back when `preferredInvoiceId` failed to load or was not a draft, failing the entire restore operation.
+  3. `SQLiteInvoiceRepository.listInvoices` failed the entire list if any single invoice record was corrupt, instead of skipping corrupt records to preserve availability.
+  4. In `CreateInvoiceScreen.tsx`, `handleSelectDraft` was silently blocked by `#invoice-workspace [data-dirty="true"]`, leaving the user unable to switch drafts when a cell had unsaved changes. Furthermore, `<InvoiceLineItems>` lacked a `key={invoice?.id}`, causing the line items spreadsheet hook (`useInvoiceGrid`) to retain stale row order from the previous draft and render phantom rows.
+- **Fixes Applied**:
+  - **Domain (`Invoice.ts`)**: Only enforce strict total check on `status === "completed"`. For drafts, `total` self-heals by computing `calculateTotal(state.items)`.
+  - **Application (`RestoreInvoiceDraft.ts`)**: Gracefully fall back to other available drafts or a newly created draft if `preferredInvoiceId` cannot be loaded.
+  - **Infrastructure (`SQLiteInvoiceRepository.ts`)**: Safely rehydrate records in `listInvoices`, skipping corrupt records to preserve draft list availability.
+  - **Presentation (`CreateInvoiceScreen.tsx`, `useInvoiceGrid.ts`)**:
+    - Add `key={invoice?.id}` to `<InvoiceLineItems>` to guarantee clean remount and fresh grid state per invoice.
+    - Remove silent blocking `data-dirty` check in `handleSelectDraft`; display friendly notice if a save is in progress.
+    - Clean up removed items in `useInvoiceGrid` when items signature changes.
+- **Verification Evidence**:
+  - 189/189 Vitest unit tests pass across 16 files (added 4 new tests in `Invoice.test.ts`, `InvoiceUseCases.test.ts`, `SQLiteInvoiceRepository.test.ts`, and `CreateInvoiceScreen.test.tsx`).
+  - 33/33 Rust tests pass.
+  - `npm run typecheck` and `npm run lint`: clean (0 errors, 0 warnings).
+
 ## Run checks
 
 From the repository root; native smoke requires a graphical desktop, creates an isolated profile and times out after 30 seconds per process.

@@ -188,11 +188,8 @@ export function CreateInvoiceScreen({
       setIsDraftsModalOpen(false);
       return;
     }
-    const unsaved = document.querySelector<HTMLInputElement>(
-      '#invoice-workspace [data-dirty="true"]',
-    );
-    if (unsaved) {
-      unsaved.focus();
+    if (isSaving) {
+      setNoticeMessage("Đang lưu thay đổi, vui lòng đợi giây lát...");
       return;
     }
     setInvoice(selected);
@@ -496,6 +493,7 @@ export function CreateInvoiceScreen({
           </div>
         </section>
         <InvoiceLineItems
+          key={invoice?.id}
           items={invoice?.items ?? []}
           isLoading={isLoading}
           isReady={Boolean(invoice)}

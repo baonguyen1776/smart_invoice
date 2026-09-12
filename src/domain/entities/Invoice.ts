@@ -138,7 +138,7 @@ export class Invoice {
     validateItems(state.id, state.items);
 
     const total = calculateTotal(state.items);
-    if (state.total !== total) {
+    if (state.status === "completed" && state.total !== total) {
       throw new InvoiceValidationError("total must equal the sum of item payments.");
     }
 

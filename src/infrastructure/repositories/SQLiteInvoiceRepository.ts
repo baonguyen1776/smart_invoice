@@ -79,7 +79,15 @@ export class SQLiteInvoiceRepository implements InvoiceRepository {
       const records = (await this.commandInvoker("list_invoices", {
         status: status ?? null,
       })) as InvoiceRecord[];
-      return ok(records.map(rehydrateInvoice));
+      const invoices: Invoice[] = [];
+      for (const record of records) {
+        try {
+          invoices.push(rehydrateInvoice(record));
+        } catch {
+          // Skip corrupt records to preserve availability of other invoices
+        }
+      }
+      return ok(invoices);
     } catch {
       return err(mapPersistenceFailure("list"));
     }

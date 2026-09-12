@@ -23,7 +23,11 @@ export interface InvoiceRowDraft {
   readonly error?: string;
 }
 const EMPTY_VALUES: InvoiceRowValues = {
-  name: "", selection: null, quantity: "", unitPrice: "", discount: "",
+  name: "",
+  selection: null,
+  quantity: "",
+  unitPrice: "",
+  discount: "",
 };
 
 export function invoiceRowValues(item?: InvoiceItem): InvoiceRowValues {
@@ -31,10 +35,15 @@ export function invoiceRowValues(item?: InvoiceItem): InvoiceRowValues {
   return {
     name: item.productName,
     selection: {
-      productId: item.productId, unitId: item.unitId, productName: item.productName,
-      productSku: item.productSku, productBrand: item.productBrand, unitName: item.unitName,
+      productId: item.productId,
+      unitId: item.unitId,
+      productName: item.productName,
+      productSku: item.productSku,
+      productBrand: item.productBrand,
+      unitName: item.unitName,
     },
-    quantity: String(item.quantity), unitPrice: String(item.unitPrice),
+    quantity: String(item.quantity),
+    unitPrice: String(item.unitPrice),
     discount: String(item.discountBasisPoints / 100),
   };
 }
@@ -44,12 +53,16 @@ function rowInput(values: InvoiceRowValues) {
     throw new Error("Chọn hàng hóa từ danh mục.");
   if (!/^-?\d+$/.test(values.quantity) || Number(values.quantity) === 0)
     throw new Error("Số lượng phải là số nguyên khác 0.");
-  if (!/^\d+$/.test(values.unitPrice)) throw new Error("Đơn giá phải là số nguyên VND từ 0 trở lên.");
+  if (!/^\d+$/.test(values.unitPrice))
+    throw new Error("Đơn giá phải là số nguyên VND từ 0 trở lên.");
   const quantity = Number(values.quantity);
   const unitPrice = Number(values.unitPrice);
   const discountBasisPoints = parseDiscountPercent(values.discount || "0");
-  try { calculateInvoiceLineAmounts(quantity, unitPrice, discountBasisPoints); }
-  catch { throw new Error("Giá trị hoặc thành tiền vượt giới hạn hợp lệ."); }
+  try {
+    calculateInvoiceLineAmounts(quantity, unitPrice, discountBasisPoints);
+  } catch {
+    throw new Error("Giá trị hoặc thành tiền vượt giới hạn hợp lệ.");
+  }
   return { ...values.selection, quantity, unitPrice, discountBasisPoints };
 }
 
@@ -57,7 +70,9 @@ export function previewInvoiceRow(values: InvoiceRowValues): InvoiceLineAmounts 
   try {
     const input = rowInput(values);
     return calculateInvoiceLineAmounts(input.quantity, input.unitPrice, input.discountBasisPoints);
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 interface UseInvoiceGridInput {
@@ -67,7 +82,10 @@ interface UseInvoiceGridInput {
 }
 
 export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInput) {
-  const [order, setOrder] = useState<string[]>(() => [...items.map((item) => item.id), crypto.randomUUID()]);
+  const [order, setOrder] = useState<string[]>(() => [
+    ...items.map((item) => item.id),
+    crypto.randomUUID(),
+  ]);
   const [drafts, setDrafts] = useState<Record<string, InvoiceRowDraft>>({});
   const draftRef = useRef(drafts);
   const [saving, setSaving] = useState<ReadonlySet<string>>(new Set());
@@ -79,8 +97,13 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
   const [previousSignature, setPreviousSignature] = useState(signature);
   if (signature !== previousSignature) {
     setPreviousSignature(signature);
+    const itemIds = new Set(items.map((item) => item.id));
     const missing = items.filter((item) => !order.includes(item.id)).map((item) => item.id);
-    if (missing.length) setOrder([...order.slice(0, -1), ...missing, order[order.length - 1]]);
+    setOrder((current) => {
+      const trailing = current[current.length - 1];
+      const retained = current.slice(0, -1).filter((id) => itemIds.has(id));
+      return [...retained, ...missing, trailing];
+    });
   }
 
   function putDraft(id: string, draft?: InvoiceRowDraft) {
@@ -93,21 +116,33 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
   function change(id: string, values: InvoiceRowValues) {
     const revision = (draftRef.current[id]?.revision ?? 0) + 1;
     putDraft(id, { values, revision });
-    setOrder((current) => (values.name || values.quantity || values.unitPrice || values.discount) && current[current.length - 1] === id ? [...current, crypto.randomUUID()] : current);
+    setOrder((current) =>
+      (values.name || values.quantity || values.unitPrice || values.discount) &&
+      current[current.length - 1] === id
+        ? [...current, crypto.randomUUID()]
+        : current,
+    );
   }
   function reset(id: string) {
     if (saving.has(id)) return;
     putDraft(id);
     submitted.current.delete(id);
-    if (!itemMap.has(id)) setOrder((current) => current.filter((key) => key !== id || key === current[current.length - 1]));
+    if (!itemMap.has(id))
+      setOrder((current) =>
+        current.filter((key) => key !== id || key === current[current.length - 1]),
+      );
   }
   function commit(id: string) {
     const draft = draftRef.current[id];
     if (!draft || submitted.current.get(id) === draft.revision) return;
     let input: ReturnType<typeof rowInput>;
-    try { input = rowInput(draft.values); }
-    catch (error) {
-      putDraft(id, { ...draft, error: error instanceof Error ? error.message : "Dòng chưa hợp lệ." });
+    try {
+      input = rowInput(draft.values);
+    } catch (error) {
+      putDraft(id, {
+        ...draft,
+        error: error instanceof Error ? error.message : "Dòng chưa hợp lệ.",
+      });
       return;
     }
     submitted.current.set(id, draft.revision);
@@ -115,13 +150,23 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
     const operation = (queues.current.get(id) ?? Promise.resolve()).then(async () => {
       let failure: string | null;
       try {
-        failure = await onCommit(savedIds.current.has(id) || itemMap.has(id)
-          ? { type: "update", itemId: id, values: {
-            quantity: input.quantity, unitPrice: input.unitPrice,
-            discountBasisPoints: input.discountBasisPoints, selection: draft.values.selection!,
-          } }
-          : { type: "add", itemId: id, ...input });
-      } catch { failure = "Chưa lưu được dòng. Hãy thử lại."; }
+        failure = await onCommit(
+          savedIds.current.has(id) || itemMap.has(id)
+            ? {
+                type: "update",
+                itemId: id,
+                values: {
+                  quantity: input.quantity,
+                  unitPrice: input.unitPrice,
+                  discountBasisPoints: input.discountBasisPoints,
+                  selection: draft.values.selection!,
+                },
+              }
+            : { type: "add", itemId: id, ...input },
+        );
+      } catch {
+        failure = "Chưa lưu được dòng. Hãy thử lại.";
+      }
       if (!failure) savedIds.current.add(id);
       if (draftRef.current[id]?.revision === draft.revision) {
         if (failure) {
@@ -137,7 +182,11 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
     void operation.finally(() => {
       if (queues.current.get(id) === operation) {
         queues.current.delete(id);
-        setSaving((current) => { const next = new Set(current); next.delete(id); return next; });
+        setSaving((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
       }
     });
   }
@@ -157,10 +206,17 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
   }
   return {
     rows: order.map((id, index) => ({
-      id, number: index + 1, values: drafts[id]?.values ?? invoiceRowValues(itemMap.get(id)),
-      isDirty: Boolean(drafts[id]), isSaving: saving.has(id), error: drafts[id]?.error,
+      id,
+      number: index + 1,
+      values: drafts[id]?.values ?? invoiceRowValues(itemMap.get(id)),
+      isDirty: Boolean(drafts[id]),
+      isSaving: saving.has(id),
+      error: drafts[id]?.error,
       isTrailing: index === order.length - 1,
     })),
-    change, commit, reset, remove,
+    change,
+    commit,
+    reset,
+    remove,
   };
 }

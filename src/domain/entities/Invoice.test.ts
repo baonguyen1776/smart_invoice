@@ -127,4 +127,34 @@ describe("Invoice", () => {
       ).toThrow(InvoiceValidationError);
     },
   );
+
+  it("reconciles mismatched totals for drafts upon rehydration without throwing", () => {
+    const draft = Invoice.rehydrate({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      status: "draft",
+      total: 999_000,
+      createdAt: CREATED_AT,
+      updatedAt: UPDATED_AT,
+      completedAt: null,
+      items: [],
+    });
+
+    expect(draft.total).toBe(0);
+  });
+
+  it("rejects mismatched totals for completed invoices upon rehydration", () => {
+    expect(() =>
+      Invoice.rehydrate({
+        id: INVOICE_ID,
+        invoiceNumber: 1,
+        status: "completed",
+        total: 999_000,
+        createdAt: CREATED_AT,
+        updatedAt: UPDATED_AT,
+        completedAt: COMPLETED_AT,
+        items: [item()],
+      }),
+    ).toThrow(InvoiceValidationError);
+  });
 });
