@@ -49,6 +49,7 @@ function applyItemChangeInMemory(
         unitName: change.unitName,
         unitPrice: change.unitPrice,
         quantity: change.quantity,
+        note: change.note,
         createdAt: now,
       }),
     ];

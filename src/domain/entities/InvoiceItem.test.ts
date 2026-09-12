@@ -56,6 +56,7 @@ describe("InvoiceItem", () => {
     ["productSku", { productSku: "   " }],
     ["productBrand", { productBrand: "   " }],
     ["unitName", { unitName: "   " }],
+    ["note", { note: "   " }],
     ["unitPrice", { unitPrice: -1 }],
     ["unitPrice", { unitPrice: 1.5 }],
     ["quantity", { quantity: 0 }],
@@ -103,4 +104,34 @@ it("defaults historical lines to no discount and persists/recalculates discount 
   expect(restored.update({ quantity: 2 }).discountAmount).toBe(21);
   expect(restored.discountBasisPoints).toBe(1000);
   expect(() => restored.update({ discountBasisPoints: 10001 })).toThrow(InvoiceItemValidationError);
+});
+
+it("supports optional per-line notes and preserves calculations", () => {
+  // 1. Defaults to null when omitted
+  const itemWithoutNote = InvoiceItem.create(validInput());
+  expect(itemWithoutNote.note).toBeNull();
+
+  // 2. Normalizes whitespace when note is provided
+  const itemWithNote = InvoiceItem.create({
+    ...validInput(),
+    note: "   Tập SVip (đã giao)   ",
+  });
+  expect(itemWithNote.note).toBe("Tập SVip (đã giao)");
+
+  // 3. Note does not affect calculations
+  expect(itemWithNote.subtotal).toBe(itemWithoutNote.subtotal);
+  expect(itemWithNote.discountAmount).toBe(itemWithoutNote.discountAmount);
+  expect(itemWithNote.payment).toBe(itemWithoutNote.payment);
+
+  // 4. Update note
+  const updatedNote = itemWithNote.update({ note: "Đã giao đợt 2" });
+  expect(updatedNote.note).toBe("Đã giao đợt 2");
+
+  // 5. Clear note by passing null
+  const clearedNote = updatedNote.update({ note: null });
+  expect(clearedNote.note).toBeNull();
+
+  // 6. Rehydration preserves note
+  const rehydrated = InvoiceItem.rehydrate(itemWithNote.toState());
+  expect(rehydrated.note).toBe("Tập SVip (đã giao)");
 });

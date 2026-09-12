@@ -394,6 +394,7 @@ fn invoice_item(id: &str, invoice_id: &str, product_id: &str, unit_id: &str) -> 
         quantity: 2,
         subtotal: 20_000,
         discount_basis_points: 0,
+        note: None,
         created_at: NOW.to_string(),
     }
 }
@@ -1261,5 +1262,34 @@ fn negative_quantity_return_lines_persist_and_recalculate_totals_correctly() {
         assert_eq!(mixed_total, 66_700);
 
         pool.close().await;
+    });
+}
+
+#[test]
+fn line_item_notes_persist_and_reject_whitespace_only() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+        let mut invoice = insert_invoice_draft(&pool, CreateInvoiceDraftInput { id: INVOICE_ID.into(), created_at: NOW.into() }).await.unwrap();
+        let mut item = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+        item.note = Some("Tập SVip (đã giao)".to_string());
+        invoice.items.push(item);
+        invoice.total = 20_000;
+        persist_draft_items_and_total(&pool, invoice.clone()).await.unwrap();
+
+        let fetched = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(fetched.items.len(), 1);
+        assert_eq!(fetched.items[0].note.as_deref(), Some("Tập SVip (đã giao)"));
+
+        // Updating note to None clears the note
+        invoice.items[0].note = None;
+        persist_draft_items_and_total(&pool, invoice.clone()).await.unwrap();
+        let fetched_cleared = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(fetched_cleared.items[0].note, None);
+
+        // Whitespace-only note violates CHECK constraint
+        invoice.items[0].note = Some("   ".to_string());
+        let err = persist_draft_items_and_total(&pool, invoice).await;
+        assert!(err.is_err());
     });
 }

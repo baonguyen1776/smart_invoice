@@ -73,6 +73,7 @@ pub struct InvoiceItemRecord {
     pub quantity: i64,
     pub subtotal: i64,
     pub discount_basis_points: i64,
+    pub note: Option<String>,
     pub created_at: String,
 }
 
@@ -495,8 +496,8 @@ async fn validate_item_ownership_and_insert(
     sqlx::query(
         "INSERT INTO invoice_items
          (id, invoice_id, product_id, unit_id, product_name, product_sku, product_brand,
-          unit_name, unit_price, quantity, subtotal, discount_basis_points, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          unit_name, unit_price, quantity, subtotal, discount_basis_points, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&item.id)
     .bind(invoice_id)
@@ -510,6 +511,7 @@ async fn validate_item_ownership_and_insert(
     .bind(item.quantity)
     .bind(item.subtotal)
     .bind(item.discount_basis_points)
+    .bind(&item.note)
     .bind(&item.created_at)
     .execute(&mut **transaction)
     .await?;
@@ -582,7 +584,7 @@ async fn fetch_invoice(
 
     let item_rows = sqlx::query(
         "SELECT id, invoice_id, product_id, unit_id, product_name, product_sku, product_brand,
-                unit_name, unit_price, quantity, subtotal, discount_basis_points, created_at
+                unit_name, unit_price, quantity, subtotal, discount_basis_points, note, created_at
          FROM invoice_items
          WHERE invoice_id = ?
          ORDER BY created_at ASC, id ASC",
@@ -608,6 +610,7 @@ async fn fetch_invoice(
             quantity: item_row.try_get("quantity")?,
             subtotal: item_row.try_get("subtotal")?,
             discount_basis_points: item_row.try_get("discount_basis_points")?,
+            note: item_row.try_get("note")?,
             created_at: item_row.try_get("created_at")?,
         });
     }
@@ -655,7 +658,7 @@ async fn fetch_invoices(
         let invoice_id: String = row.try_get("id")?;
         let item_rows = sqlx::query(
             "SELECT id, invoice_id, product_id, unit_id, product_name, product_sku, product_brand,
-                    unit_name, unit_price, quantity, subtotal, discount_basis_points, created_at
+                    unit_name, unit_price, quantity, subtotal, discount_basis_points, note, created_at
              FROM invoice_items
              WHERE invoice_id = ?
              ORDER BY created_at ASC, id ASC",
@@ -679,6 +682,7 @@ async fn fetch_invoices(
                 quantity: item_row.try_get("quantity")?,
                 subtotal: item_row.try_get("subtotal")?,
                 discount_basis_points: item_row.try_get("discount_basis_points")?,
+                note: item_row.try_get("note")?,
                 created_at: item_row.try_get("created_at")?,
             });
         }

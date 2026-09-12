@@ -159,6 +159,7 @@ fn invoice_draft_benchmark() {
                     quantity: 1,
                     subtotal: 10_000,
                     discount_basis_points: 0,
+                    note: None,
                     created_at: "2026-01-01T00:00:00.000Z".to_string(),
                 })
                 .collect()

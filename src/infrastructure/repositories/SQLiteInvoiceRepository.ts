@@ -25,6 +25,7 @@ interface InvoiceItemRecord {
   readonly quantity: number;
   readonly subtotal: number;
   readonly discountBasisPoints: number;
+  readonly note: string | null;
   readonly createdAt: string;
 }
 
@@ -157,6 +158,7 @@ function toRecord(invoice: Invoice): InvoiceRecord {
         quantity: itemState.quantity,
         subtotal: itemState.subtotal,
         discountBasisPoints: itemState.discountBasisPoints,
+        note: itemState.note,
         createdAt: itemState.createdAt,
       };
     }),
@@ -180,6 +182,7 @@ function rehydrateInvoice(record: InvoiceRecord): Invoice {
         quantity: item.quantity,
         subtotal: item.subtotal,
         discountBasisPoints: item.discountBasisPoints,
+        note: item.note ?? null,
         createdAt: item.createdAt,
       }),
     ),

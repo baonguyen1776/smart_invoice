@@ -231,3 +231,44 @@ it("persists discounts across completion without losing snapshots", async () => 
   const loaded = await repository.findById(INVOICE_ID);
   expect(loaded.ok && loaded.value?.items[0].discountBasisPoints).toBe(1250);
 });
+
+it("persists line-item note additions and updates via ApplyInvoiceItemChange", async () => {
+  const repository = new InMemoryInvoiceRepository([draft()]);
+  const useCase = new ApplyInvoiceItemChange(repository, ids, clock);
+  const add = await useCase.execute({
+    invoiceId: INVOICE_ID,
+    change: {
+      type: "add",
+      productId: PRODUCT_ID,
+      unitId: UNIT_ID,
+      productName: "Coca Cola",
+      productSku: null,
+      productBrand: null,
+      unitName: "Lon",
+      unitPrice: 12_000,
+      quantity: 2,
+      note: "Đã giao 1 lon",
+    },
+  });
+  expect(add.ok && add.value.items[0].note).toBe("Đã giao 1 lon");
+
+  const updateNote = await useCase.execute({
+    invoiceId: INVOICE_ID,
+    change: {
+      type: "update",
+      itemId: ITEM_ID,
+      values: { note: "Đã giao cả 2 lon" },
+    },
+  });
+  expect(updateNote.ok && updateNote.value.items[0].note).toBe("Đã giao cả 2 lon");
+
+  const clearNote = await useCase.execute({
+    invoiceId: INVOICE_ID,
+    change: {
+      type: "update",
+      itemId: ITEM_ID,
+      values: { note: null },
+    },
+  });
+  expect(clearNote.ok && clearNote.value.items[0].note).toBeNull();
+});

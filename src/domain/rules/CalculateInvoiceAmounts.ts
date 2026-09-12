@@ -13,7 +13,11 @@ export function calculateInvoiceLineAmounts(
     throw new Error("quantity must be a non-zero safe integer.");
   if (!Number.isSafeInteger(unitPrice) || unitPrice < 0)
     throw new Error("unitPrice must be a non-negative safe integer.");
-  if (!Number.isInteger(discountBasisPoints) || discountBasisPoints < 0 || discountBasisPoints > 10_000)
+  if (
+    !Number.isInteger(discountBasisPoints) ||
+    discountBasisPoints < 0 ||
+    discountBasisPoints > 10_000
+  )
     throw new Error("discountBasisPoints must be an integer from 0 to 10000.");
   const subtotal = quantity * unitPrice;
   if (!Number.isSafeInteger(subtotal)) throw new Error("subtotal exceeds the safe integer range.");
@@ -26,7 +30,8 @@ export function calculateInvoiceLineAmounts(
 }
 
 export function parseDiscountPercent(value: string): number {
-  if (!/^\d{1,3}(?:[.,]\d{1,2})?$/.test(value)) throw new Error("CK phải từ 0–100%, tối đa 2 số thập phân.");
+  if (!/^\d{1,3}(?:[.,]\d{1,2})?$/.test(value))
+    throw new Error("CK phải từ 0–100%, tối đa 2 số thập phân.");
   const [whole, fraction = ""] = value.replace(",", ".").split(".");
   const basisPoints = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
   if (basisPoints > 10_000) throw new Error("CK phải từ 0–100%, tối đa 2 số thập phân.");
@@ -45,5 +50,9 @@ export function sumInvoiceAmounts(lines: readonly InvoiceLineAmounts[]): Invoice
   const max = BigInt(Number.MAX_SAFE_INTEGER);
   if ([subtotal, discountAmount, payment].some((amount) => amount < -max || amount > max))
     throw new Error("Invoice amounts exceed the safe integer range.");
-  return { subtotal: Number(subtotal), discountAmount: Number(discountAmount), payment: Number(payment) };
+  return {
+    subtotal: Number(subtotal),
+    discountAmount: Number(discountAmount),
+    payment: Number(payment),
+  };
 }

@@ -15,16 +15,27 @@ export interface InvoiceItemState {
   readonly quantity: number;
   readonly subtotal: number;
   readonly discountBasisPoints: number;
+  readonly note: string | null;
   readonly createdAt: string;
 }
 
-export type CreateInvoiceItemInput = Omit<InvoiceItemState, "subtotal" | "discountBasisPoints"> & { readonly discountBasisPoints?: number };
+export type CreateInvoiceItemInput = Omit<
+  InvoiceItemState,
+  "subtotal" | "discountBasisPoints" | "note"
+> & {
+  readonly discountBasisPoints?: number;
+  readonly note?: string | null;
+};
 
 export interface UpdateInvoiceItemInput {
   readonly quantity?: number;
   readonly unitPrice?: number;
   readonly discountBasisPoints?: number;
-  readonly selection?: Pick<InvoiceItemState, "productId" | "unitId" | "productName" | "productSku" | "productBrand" | "unitName">;
+  readonly note?: string | null;
+  readonly selection?: Pick<
+    InvoiceItemState,
+    "productId" | "unitId" | "productName" | "productSku" | "productBrand" | "unitName"
+  >;
 }
 
 export class InvoiceItemValidationError extends Error {
@@ -47,6 +58,7 @@ export class InvoiceItem {
   readonly quantity: number;
   readonly subtotal: number;
   readonly discountBasisPoints: number;
+  readonly note: string | null;
   readonly createdAt: string;
 
   private constructor(state: InvoiceItemState) {
@@ -62,14 +74,18 @@ export class InvoiceItem {
     this.quantity = state.quantity;
     this.subtotal = state.subtotal;
     this.discountBasisPoints = state.discountBasisPoints;
+    this.note = state.note;
     this.createdAt = state.createdAt;
   }
 
   get discountAmount(): number {
-    return calculateInvoiceLineAmounts(this.quantity, this.unitPrice, this.discountBasisPoints).discountAmount;
+    return calculateInvoiceLineAmounts(this.quantity, this.unitPrice, this.discountBasisPoints)
+      .discountAmount;
   }
 
-  get payment(): number { return this.subtotal - this.discountAmount; }
+  get payment(): number {
+    return this.subtotal - this.discountAmount;
+  }
 
   static create(input: CreateInvoiceItemInput): InvoiceItem {
     return InvoiceItem.fromValues(input);
@@ -92,6 +108,7 @@ export class InvoiceItem {
       discountBasisPoints: input.discountBasisPoints ?? this.discountBasisPoints,
       quantity: input.quantity ?? this.quantity,
       unitPrice: input.unitPrice ?? this.unitPrice,
+      note: input.note !== undefined ? input.note : this.note,
     });
   }
 
@@ -109,6 +126,7 @@ export class InvoiceItem {
       quantity: this.quantity,
       subtotal: this.subtotal,
       discountBasisPoints: this.discountBasisPoints,
+      note: this.note,
       createdAt: this.createdAt,
     };
   }
@@ -128,9 +146,15 @@ export class InvoiceItem {
     const discountBasisPoints = input.discountBasisPoints ?? 0;
     let subtotal: number;
     try {
-      subtotal = calculateInvoiceLineAmounts(input.quantity, input.unitPrice, discountBasisPoints).subtotal;
+      subtotal = calculateInvoiceLineAmounts(
+        input.quantity,
+        input.unitPrice,
+        discountBasisPoints,
+      ).subtotal;
     } catch (error) {
-      throw new InvoiceItemValidationError(error instanceof Error ? error.message : "Invalid invoice amounts.");
+      throw new InvoiceItemValidationError(
+        error instanceof Error ? error.message : "Invalid invoice amounts.",
+      );
     }
 
     return new InvoiceItem({
@@ -139,6 +163,7 @@ export class InvoiceItem {
       productSku: normalizeOptionalText(input.productSku, "productSku"),
       productBrand: normalizeOptionalText(input.productBrand, "productBrand"),
       unitName: normalizeRequiredText(input.unitName, "unitName"),
+      note: normalizeOptionalText(input.note ?? null, "note"),
       subtotal,
       discountBasisPoints,
     });
