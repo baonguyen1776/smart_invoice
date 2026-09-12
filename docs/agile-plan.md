@@ -127,8 +127,10 @@ where business logic lives, how DB migrations work, and what agents must not tou
 - [x] UX-005 Draft auto-save on semantic events (add item / edit quantity / edit price / remove item) — debounced, not on every keystroke
 - [x] UX-008 Allow negative-quantity return/deduction lines in invoices (Issue #28)
 - [ ] UX-009 UI Refactoring & Design System: standardize buttons, colors, and polish overall interface (Issue #35)
-- [ ] UX-006 Complete Invoice (status draft → completed)
-- [ ] UX-007 Edit a completed invoice: confirmation dialog, then overwrite on save (confirmed decision — kept in MVP)
+- [x] UX-006 Complete Invoice (status draft → completed) (Issue #19)
+- [x] UX-007 Edit a completed invoice: confirmation dialog, then overwrite on save (Issue #19)
+- [ ] UX-010 Receipt print preview modal upon invoice completion (Issue #37)
+- [ ] UX-011 Dedicated Invoice History screen with search and detail view (Issue #38)
 
 ## Sprint 4 — Printing (2-3 days)
 

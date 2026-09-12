@@ -1,9 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ApplyInvoiceItemChange } from "./application/use-cases/ApplyInvoiceItemChange";
+import { CompleteInvoice } from "./application/use-cases/CompleteInvoice";
 import { CreateInvoiceDraft } from "./application/use-cases/CreateInvoiceDraft";
 import { DeleteInvoiceDraft } from "./application/use-cases/DeleteInvoiceDraft";
 import { ListInvoices } from "./application/use-cases/ListInvoices";
+import { OverwriteCompletedInvoice } from "./application/use-cases/OverwriteCompletedInvoice";
 import { RestoreInvoiceDraft } from "./application/use-cases/RestoreInvoiceDraft";
 import { CreateProduct } from "./application/use-cases/CreateProduct";
 import { DeactivateProduct } from "./application/use-cases/DeactivateProduct";
@@ -57,6 +59,8 @@ const invoiceActions = {
   searchProducts: new SearchProducts(searchIndex),
   listInvoices: new ListInvoices(invoiceRepository),
   deleteInvoiceDraft: new DeleteInvoiceDraft(invoiceRepository),
+  completeInvoice: new CompleteInvoice(invoiceRepository, clock),
+  overwriteCompletedInvoice: new OverwriteCompletedInvoice(invoiceRepository, clock),
 };
 
 createRoot(rootElement).render(

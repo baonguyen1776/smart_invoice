@@ -4,13 +4,15 @@ import type {
   ApplyInvoiceItemChange,
   InvoiceItemChange,
 } from "../../application/use-cases/ApplyInvoiceItemChange";
+import type { CompleteInvoice } from "../../application/use-cases/CompleteInvoice";
 import type { CreateInvoiceDraft } from "../../application/use-cases/CreateInvoiceDraft";
 import type { DeleteInvoiceDraft } from "../../application/use-cases/DeleteInvoiceDraft";
 import type { ListInvoices } from "../../application/use-cases/ListInvoices";
+import type { OverwriteCompletedInvoice } from "../../application/use-cases/OverwriteCompletedInvoice";
 import type { RestoreInvoiceDraft } from "../../application/use-cases/RestoreInvoiceDraft";
 import type { SearchProducts } from "../../application/use-cases/SearchProducts";
 import type { Invoice } from "../../domain/entities/Invoice";
-import type { InvoiceItem } from "../../domain/entities/InvoiceItem";
+import { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import { InvoiceIcon } from "../components/InvoiceIcon";
 import { InvoiceLineItems } from "../components/InvoiceLineItems";
 import "./CreateInvoiceScreen.css";
@@ -22,6 +24,50 @@ export interface InvoiceScreenActions {
   readonly searchProducts: Pick<SearchProducts, "execute">;
   readonly listInvoices?: Pick<ListInvoices, "execute">;
   readonly deleteInvoiceDraft?: Pick<DeleteInvoiceDraft, "execute">;
+  readonly completeInvoice?: Pick<CompleteInvoice, "execute">;
+  readonly overwriteCompletedInvoice?: Pick<OverwriteCompletedInvoice, "execute">;
+}
+
+function applyItemChangeInMemory(
+  items: readonly InvoiceItem[],
+  invoiceId: string,
+  change: InvoiceItemChange,
+  now: string,
+): readonly InvoiceItem[] {
+  if (change.type === "add") {
+    return [
+      ...items,
+      InvoiceItem.create({
+        id: change.itemId ?? crypto.randomUUID(),
+        discountBasisPoints: change.discountBasisPoints,
+        invoiceId,
+        productId: change.productId,
+        unitId: change.unitId,
+        productName: change.productName,
+        productSku: change.productSku,
+        productBrand: change.productBrand,
+        unitName: change.unitName,
+        unitPrice: change.unitPrice,
+        quantity: change.quantity,
+        createdAt: now,
+      }),
+    ];
+  }
+
+  const index = items.findIndex((item) => item.id === change.itemId);
+  if (index < 0) return items;
+
+  if (change.type === "remove") {
+    return items.filter((_, itemIndex) => itemIndex !== index);
+  }
+
+  return items.map((item, itemIndex) => {
+    if (itemIndex !== index) return item;
+    if (change.type === "update") return item.update(change.values);
+    return change.type === "update_quantity"
+      ? item.update({ quantity: change.quantity })
+      : item.update({ unitPrice: change.unitPrice });
+  });
 }
 
 export interface CreateInvoiceScreenProps {
@@ -49,11 +95,18 @@ export function CreateInvoiceScreen({
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [drafts, setDrafts] = useState<readonly Invoice[]>([]);
+  const [completedInvoices, setCompletedInvoices] = useState<readonly Invoice[]>([]);
+  const [invoicesTab, setInvoicesTab] = useState<"drafts" | "completed">("drafts");
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
+  const [originalCompletedInvoice, setOriginalCompletedInvoice] = useState<Invoice | null>(null);
+  const [hasStagedChanges, setHasStagedChanges] = useState(false);
+  const [isConfirmOverwriteOpen, setIsConfirmOverwriteOpen] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [isOverwriting, setIsOverwriting] = useState(false);
   const undoButtonRef = useRef<HTMLButtonElement>(null);
   const changeQueue = useRef<Promise<unknown>>(Promise.resolve());
   const selectionPending = useRef(false);
-  const isSaving = pendingChanges > 0;
+  const isSaving = pendingChanges > 0 || isOverwriting;
 
   const [loadAttempt, setLoadAttempt] = useState(0);
   const draftRequest = useRef<{
@@ -82,12 +135,16 @@ export function CreateInvoiceScreen({
     setCustomerNote("");
   }, []);
 
-  const refreshDrafts = useCallback(async () => {
+  const refreshInvoices = useCallback(async () => {
     if (!actions.listInvoices) return;
     try {
-      const result = await actions.listInvoices.execute({ status: "draft" });
-      if (result.ok) {
-        setDrafts(result.value);
+      const draftsResult = await actions.listInvoices.execute({ status: "draft" });
+      if (draftsResult.ok) {
+        setDrafts(draftsResult.value);
+      }
+      const completedResult = await actions.listInvoices.execute({ status: "completed" });
+      if (completedResult.ok) {
+        setCompletedInvoices(completedResult.value);
       }
     } catch {
       // ignore
@@ -128,8 +185,11 @@ export function CreateInvoiceScreen({
         if (isCancelled) return;
         if (result.ok) {
           setInvoice(result.value);
+          if (result.value.status === "completed") {
+            setOriginalCompletedInvoice(result.value);
+          }
           loadCustomerForInvoice(result.value.id);
-          void refreshDrafts();
+          void refreshInvoices();
         } else {
           setErrorMessage("Không thể mở hóa đơn nháp. Vui lòng thử lại.");
         }
@@ -148,7 +208,7 @@ export function CreateInvoiceScreen({
     actions.restoreInvoiceDraft,
     loadAttempt,
     loadCustomerForInvoice,
-    refreshDrafts,
+    refreshInvoices,
   ]);
 
   useEffect(() => {
@@ -183,7 +243,7 @@ export function CreateInvoiceScreen({
     }
   }
 
-  function handleSelectDraft(selected: Invoice) {
+  function handleSelectInvoice(selected: Invoice) {
     if (selected.id === invoice?.id) {
       setIsDraftsModalOpen(false);
       return;
@@ -193,9 +253,19 @@ export function CreateInvoiceScreen({
       return;
     }
     setInvoice(selected);
+    if (selected.status === "completed") {
+      setOriginalCompletedInvoice(selected);
+      setHasStagedChanges(false);
+      setNoticeMessage(
+        `Đang xem hóa đơn đã chốt #${String(selected.invoiceNumber).padStart(6, "0")}`,
+      );
+    } else {
+      setOriginalCompletedInvoice(null);
+      setHasStagedChanges(false);
+      setNoticeMessage(`Đã mở bản nháp #${String(selected.invoiceNumber).padStart(6, "0")}`);
+    }
     loadCustomerForInvoice(selected.id);
     setIsDraftsModalOpen(false);
-    setNoticeMessage(`Đã mở bản nháp #${String(selected.invoiceNumber).padStart(6, "0")}`);
   }
 
   async function handleCreateNewDraft() {
@@ -206,11 +276,13 @@ export function CreateInvoiceScreen({
       const result = await actions.createInvoiceDraft.execute();
       if (result.ok) {
         setInvoice(result.value);
+        setOriginalCompletedInvoice(null);
+        setHasStagedChanges(false);
         loadCustomerForInvoice(result.value.id);
         setNoticeMessage(
           `Đã tạo bản nháp mới #${String(result.value.invoiceNumber).padStart(6, "0")}`,
         );
-        void refreshDrafts();
+        void refreshInvoices();
       } else {
         setErrorMessage("Không thể tạo bản nháp mới.");
       }
@@ -239,6 +311,8 @@ export function CreateInvoiceScreen({
       const remaining = drafts.filter((d) => d.id !== target.id);
       if (remaining.length > 0) {
         setInvoice(remaining[0]);
+        setOriginalCompletedInvoice(null);
+        setHasStagedChanges(false);
         loadCustomerForInvoice(remaining[0].id);
         setNoticeMessage(`Đã xóa bản nháp #${String(target.invoiceNumber).padStart(6, "0")}`);
       } else {
@@ -247,13 +321,117 @@ export function CreateInvoiceScreen({
     } else {
       setNoticeMessage(`Đã xóa bản nháp #${String(target.invoiceNumber).padStart(6, "0")}`);
     }
-    void refreshDrafts();
+    void refreshInvoices();
+  }
+
+  async function handleCompleteInvoice() {
+    if (!invoice || invoice.status !== "draft" || invoice.items.length === 0) return;
+    const unsaved = document.querySelector<HTMLInputElement>(
+      '#invoice-workspace [data-dirty="true"]',
+    );
+    if (unsaved) {
+      unsaved.focus();
+      return;
+    }
+    setIsCompleting(true);
+    setErrorMessage(null);
+    try {
+      if (actions.completeInvoice) {
+        const result = await actions.completeInvoice.execute({ invoiceId: invoice.id });
+        if (result.ok) {
+          setInvoice(result.value);
+          setOriginalCompletedInvoice(result.value);
+          setHasStagedChanges(false);
+          try {
+            localStorage.removeItem("smart_invoice_active_draft_id");
+          } catch {
+            // ignore
+          }
+          setNoticeMessage(
+            `Đã hoàn thành hóa đơn #${String(result.value.invoiceNumber).padStart(6, "0")}`,
+          );
+          onCompleteInvoice?.(result.value);
+          void refreshInvoices();
+        } else {
+          const message =
+            "message" in result.error && typeof result.error.message === "string"
+              ? result.error.message
+              : "Không thể hoàn thành hóa đơn.";
+          setErrorMessage(message);
+        }
+      } else {
+        try {
+          localStorage.removeItem("smart_invoice_active_draft_id");
+        } catch {
+          // ignore
+        }
+        onCompleteInvoice?.(invoice);
+      }
+    } catch {
+      setErrorMessage("Không thể hoàn thành hóa đơn.");
+    } finally {
+      setIsCompleting(false);
+    }
+  }
+
+  async function handleConfirmOverwrite() {
+    if (!invoice || invoice.status !== "completed" || !actions.overwriteCompletedInvoice) return;
+    setIsOverwriting(true);
+    setErrorMessage(null);
+    try {
+      const result = await actions.overwriteCompletedInvoice.execute({
+        invoiceId: invoice.id,
+        confirmed: true,
+        items: invoice.items,
+      });
+      if (result.ok) {
+        setInvoice(result.value);
+        setOriginalCompletedInvoice(result.value);
+        setHasStagedChanges(false);
+        setIsConfirmOverwriteOpen(false);
+        setNoticeMessage(
+          `Đã cập nhật hóa đơn đã chốt #${String(result.value.invoiceNumber).padStart(6, "0")}`,
+        );
+        void refreshInvoices();
+      } else {
+        setErrorMessage("Không thể ghi đè hóa đơn đã chốt.");
+        setIsConfirmOverwriteOpen(false);
+      }
+    } catch {
+      setErrorMessage("Không thể ghi đè hóa đơn đã chốt.");
+      setIsConfirmOverwriteOpen(false);
+    } finally {
+      setIsOverwriting(false);
+    }
+  }
+
+  function handleDiscardChanges() {
+    if (originalCompletedInvoice) {
+      setInvoice(originalCompletedInvoice);
+      setHasStagedChanges(false);
+      setNoticeMessage("Đã hủy các thay đổi trên hóa đơn.");
+    }
   }
 
   // Queue semantic edits so rapid Tab entry cannot overwrite an earlier save.
   const applyChange = useCallback(
     (change: InvoiceItemChange): Promise<string | null> => {
       if (!invoice) return Promise.resolve("Hóa đơn chưa sẵn sàng. Vui lòng thử lại.");
+      if (invoice.status === "completed") {
+        try {
+          const now = new Date().toISOString();
+          const nextItems = applyItemChangeInMemory(invoice.items, invoice.id, change, now);
+          const updated = invoice.overwriteCompleted(nextItems, now);
+          setInvoice(updated);
+          setHasStagedChanges(true);
+          setErrorMessage(null);
+          return Promise.resolve(null);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Chưa lưu được thay đổi.";
+          setErrorMessage(message);
+          return Promise.resolve(message);
+        }
+      }
       setPendingChanges((count) => count + 1);
       const operation = changeQueue.current.then(async () => {
         try {
@@ -367,9 +545,12 @@ export function CreateInvoiceScreen({
               Không gian làm việc <span>/</span> Bán hàng
             </p>
             <div className="invoice-heading-row">
-              <h1>Tạo hóa đơn mới</h1>
+              <h1>{invoice?.status === "completed" ? "Chi tiết hóa đơn" : "Tạo hóa đơn mới"}</h1>
               <span className="invoice-live-badge">BÁN HÀNG</span>
               <span className="invoice-id-badge">{invoiceNumber}</span>
+              {invoice?.status === "completed" && (
+                <span className="invoice-status-tag is-completed">ĐÃ HOÀN TẤT</span>
+              )}
               <button
                 type="button"
                 className="btn-new-draft-header"
@@ -386,12 +567,16 @@ export function CreateInvoiceScreen({
             <div className="invoice-header-status" role="status">
               <span className={`invoice-status-dot ${isSaving || isLoading ? "is-pending" : ""}`} />
               {isLoading
-                ? "Đang mở bản nháp…"
+                ? "Đang mở hóa đơn…"
                 : isSaving
                   ? "Đang lưu thay đổi…"
-                  : errorMessage
-                    ? "Cần kiểm tra bản nháp"
-                    : "Bản nháp đã được lưu"}
+                  : invoice?.status === "completed"
+                    ? hasStagedChanges
+                      ? "Có thay đổi chưa lưu (chờ ghi đè)"
+                      : "Hóa đơn đã chốt"
+                    : errorMessage
+                      ? "Cần kiểm tra bản nháp"
+                      : "Bản nháp đã được lưu"}
             </div>
           </div>
         </header>
@@ -403,6 +588,26 @@ export function CreateInvoiceScreen({
             </span>
           )}
         </div>
+        {invoice?.status === "completed" && hasStagedChanges && (
+          <div className="notice warning notice-staged-changes" role="alert">
+            <InvoiceIcon name="alert" size={16} />
+            <div className="notice-staged-content">
+              <strong>Hóa đơn đã chốt đang có thay đổi tạm thời.</strong>
+              <span>
+                Các chỉnh sửa chưa được lưu vào cơ sở dữ liệu cho đến khi bạn nhấn &quot;Lưu ghi
+                đè&quot;.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="secondary-button btn-discard-banner"
+              onClick={handleDiscardChanges}
+              disabled={isSaving}
+            >
+              Hủy thay đổi
+            </button>
+          </div>
+        )}
         {errorMessage && (
           <div className="notice error" role="alert">
             {errorMessage}
@@ -502,44 +707,84 @@ export function CreateInvoiceScreen({
           searchProducts={actions.searchProducts}
           onNavigateToProducts={onNavigateToProducts}
           onOpenDrafts={() => {
-            void refreshDrafts();
+            void refreshInvoices();
             setIsDraftsModalOpen((open) => !open);
           }}
           draftsCount={drafts.length}
           isDraftsOpen={isDraftsModalOpen}
         />
         <footer className="invoice-footer-bar">
-          <div className="invoice-action-group">
-            <button
-              type="button"
-              className="primary-button btn-complete-invoice"
-              disabled={
-                !onCompleteInvoice || !invoice?.items.length || isSaving || Boolean(errorMessage)
-              }
-              aria-describedby={!onCompleteInvoice ? "invoice-completion-help" : undefined}
-              onClick={() => {
-                const unsaved = document.querySelector<HTMLInputElement>(
-                  '#invoice-workspace [data-dirty="true"]',
-                );
-                if (unsaved) {
-                  unsaved.focus();
-                  return;
+          {invoice?.status === "completed" ? (
+            hasStagedChanges ? (
+              <div className="invoice-action-group completed-edit-actions">
+                <button
+                  type="button"
+                  className="secondary-button btn-discard-changes"
+                  onClick={handleDiscardChanges}
+                  disabled={isSaving}
+                >
+                  Hủy thay đổi
+                </button>
+                <button
+                  type="button"
+                  className="primary-button btn-save-overwrite"
+                  disabled={isSaving || !invoice.items.length || Boolean(errorMessage)}
+                  onClick={() => setIsConfirmOverwriteOpen(true)}
+                >
+                  <InvoiceIcon name="check" size={16} />
+                  Lưu ghi đè
+                </button>
+              </div>
+            ) : (
+              <div className="invoice-action-group completed-view-actions">
+                <button
+                  type="button"
+                  className="secondary-button btn-new-invoice-footer"
+                  onClick={() => void handleCreateNewDraft()}
+                  disabled={isSaving || isLoading}
+                >
+                  <InvoiceIcon name="plus" size={16} />
+                  Tạo hóa đơn mới
+                </button>
+                <button
+                  type="button"
+                  className="primary-button btn-print-completed"
+                  onClick={() => {
+                    window.print();
+                  }}
+                >
+                  <InvoiceIcon name="receipt" size={16} />
+                  In hóa đơn
+                </button>
+              </div>
+            )
+          ) : (
+            <div className="invoice-action-group">
+              <button
+                type="button"
+                className="primary-button btn-complete-invoice"
+                disabled={
+                  (!actions.completeInvoice && !onCompleteInvoice) ||
+                  !invoice?.items.length ||
+                  isSaving ||
+                  isCompleting ||
+                  Boolean(errorMessage)
                 }
-                if (invoice) {
-                  try {
-                    localStorage.removeItem("smart_invoice_active_draft_id");
-                  } catch {
-                    // ignore
-                  }
-                  onCompleteInvoice?.(invoice);
+                aria-describedby={
+                  !actions.completeInvoice && !onCompleteInvoice
+                    ? "invoice-completion-help"
+                    : undefined
                 }
-              }}
-            >
-              Hoàn thành
-              <InvoiceIcon name="arrow" size={16} />
-            </button>
-            {!onCompleteInvoice && <p id="invoice-completion-help">Chưa khả dụng</p>}
-          </div>
+                onClick={() => void handleCompleteInvoice()}
+              >
+                {isCompleting ? "Đang hoàn tất…" : "Hoàn thành"}
+                <InvoiceIcon name="arrow" size={16} />
+              </button>
+              {!actions.completeInvoice && !onCompleteInvoice && (
+                <p id="invoice-completion-help">Chưa khả dụng</p>
+              )}
+            </div>
+          )}
         </footer>
         {isDraftsModalOpen && (
           <div
@@ -558,7 +803,30 @@ export function CreateInvoiceScreen({
                 <div className="drafts-modal-title-wrap">
                   <InvoiceIcon name="receipt" size={18} />
                   <h2 id="drafts-modal-title">Bản nháp đã lưu</h2>
-                  <span className="drafts-modal-count">{drafts.length}</span>
+                </div>
+                <div className="invoices-modal-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    id="tab-drafts"
+                    aria-selected={invoicesTab === "drafts"}
+                    aria-controls="panel-drafts"
+                    className={`invoices-modal-tab ${invoicesTab === "drafts" ? "is-active" : ""}`}
+                    onClick={() => setInvoicesTab("drafts")}
+                  >
+                    Bản nháp ({drafts.length})
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="tab-completed"
+                    aria-selected={invoicesTab === "completed"}
+                    aria-controls="panel-completed"
+                    className={`invoices-modal-tab ${invoicesTab === "completed" ? "is-active" : ""}`}
+                    onClick={() => setInvoicesTab("completed")}
+                  >
+                    Đã hoàn thành ({completedInvoices.length})
+                  </button>
                 </div>
                 <div className="drafts-modal-actions">
                   <button
@@ -573,7 +841,7 @@ export function CreateInvoiceScreen({
                     type="button"
                     className="btn-close-drafts-modal"
                     onClick={() => setIsDraftsModalOpen(false)}
-                    aria-label="Đóng danh sách bản nháp"
+                    aria-label="Đóng danh sách hóa đơn"
                   >
                     <InvoiceIcon name="close" size={16} />
                   </button>
@@ -581,29 +849,111 @@ export function CreateInvoiceScreen({
               </div>
 
               <div className="invoice-drafts-modal-body">
-                {drafts.length === 0 ? (
+                {invoicesTab === "drafts" ? (
+                  drafts.length === 0 ? (
+                    <div className="drafts-empty-state">
+                      <InvoiceIcon name="receipt" size={32} />
+                      <p>Chưa có bản nháp nào được lưu.</p>
+                    </div>
+                  ) : (
+                    <ul className="drafts-list" role="list" id="panel-drafts">
+                      {drafts.map((d) => {
+                        const isCurrent = d.id === invoice?.id;
+                        const customerData = getSavedCustomer(d.id);
+                        return (
+                          <li
+                            key={d.id}
+                            className={`draft-item-card ${isCurrent ? "is-active-draft" : ""}`}
+                            onClick={() => handleSelectInvoice(d)}
+                          >
+                            <div className="draft-card-main">
+                              <div className="draft-card-heading">
+                                <span className="draft-card-number">
+                                  #{String(d.invoiceNumber).padStart(6, "0")}
+                                </span>
+                                {isCurrent && <span className="draft-current-tag">Đang mở</span>}
+                                <span className="draft-time">
+                                  {formatRelativeTime(d.updatedAt)}
+                                </span>
+                              </div>
+                              <div className="draft-card-details">
+                                <span className="draft-customer-name">
+                                  <InvoiceIcon name="user" size={12} />
+                                  {customerData?.name || "Khách lẻ"}
+                                </span>
+                                <span className="draft-items-count">
+                                  <InvoiceIcon name="box" size={12} />
+                                  {d.items.length} mặt hàng
+                                </span>
+                              </div>
+                            </div>
+                            <div className="draft-card-aside">
+                              <strong className="draft-card-total">
+                                {d.total.toLocaleString("vi-VN")} ₫
+                              </strong>
+                              <div className="draft-card-buttons">
+                                <button
+                                  type="button"
+                                  className={
+                                    isCurrent
+                                      ? "secondary-button btn-open-draft"
+                                      : "primary-button btn-open-draft"
+                                  }
+                                  disabled={isCurrent}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectInvoice(d);
+                                  }}
+                                >
+                                  {isCurrent ? "Đang sửa" : "Mở bản nháp"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-delete-draft"
+                                  title="Xóa bản nháp này"
+                                  aria-label={`Xóa bản nháp #${String(d.invoiceNumber).padStart(6, "0")}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleDeleteDraft(d);
+                                  }}
+                                >
+                                  <InvoiceIcon name="trash" size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )
+                ) : completedInvoices.length === 0 ? (
                   <div className="drafts-empty-state">
                     <InvoiceIcon name="receipt" size={32} />
-                    <p>Chưa có bản nháp nào được lưu.</p>
+                    <p>Chưa có hóa đơn nào hoàn thành.</p>
                   </div>
                 ) : (
-                  <ul className="drafts-list" role="list">
-                    {drafts.map((d) => {
-                      const isCurrent = d.id === invoice?.id;
-                      const customerData = getSavedCustomer(d.id);
+                  <ul className="drafts-list" role="list" id="panel-completed">
+                    {completedInvoices.map((c) => {
+                      const isCurrent = c.id === invoice?.id;
+                      const customerData = getSavedCustomer(c.id);
                       return (
                         <li
-                          key={d.id}
+                          key={c.id}
                           className={`draft-item-card ${isCurrent ? "is-active-draft" : ""}`}
-                          onClick={() => handleSelectDraft(d)}
+                          onClick={() => handleSelectInvoice(c)}
                         >
                           <div className="draft-card-main">
                             <div className="draft-card-heading">
                               <span className="draft-card-number">
-                                #{String(d.invoiceNumber).padStart(6, "0")}
+                                #{String(c.invoiceNumber).padStart(6, "0")}
                               </span>
+                              <span className="draft-completed-tag">Đã chốt</span>
                               {isCurrent && <span className="draft-current-tag">Đang mở</span>}
-                              <span className="draft-time">{formatRelativeTime(d.updatedAt)}</span>
+                              <span className="draft-time">
+                                {c.completedAt
+                                  ? formatRelativeTime(c.completedAt)
+                                  : formatRelativeTime(c.updatedAt)}
+                              </span>
                             </div>
                             <div className="draft-card-details">
                               <span className="draft-customer-name">
@@ -612,13 +962,13 @@ export function CreateInvoiceScreen({
                               </span>
                               <span className="draft-items-count">
                                 <InvoiceIcon name="box" size={12} />
-                                {d.items.length} mặt hàng
+                                {c.items.length} mặt hàng
                               </span>
                             </div>
                           </div>
                           <div className="draft-card-aside">
                             <strong className="draft-card-total">
-                              {d.total.toLocaleString("vi-VN")} ₫
+                              {c.total.toLocaleString("vi-VN")} ₫
                             </strong>
                             <div className="draft-card-buttons">
                               <button
@@ -631,22 +981,10 @@ export function CreateInvoiceScreen({
                                 disabled={isCurrent}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleSelectDraft(d);
+                                  handleSelectInvoice(c);
                                 }}
                               >
-                                {isCurrent ? "Đang sửa" : "Mở bản nháp"}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-delete-draft"
-                                title="Xóa bản nháp này"
-                                aria-label={`Xóa bản nháp #${String(d.invoiceNumber).padStart(6, "0")}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleDeleteDraft(d);
-                                }}
-                              >
-                                <InvoiceIcon name="trash" size={13} />
+                                {isCurrent ? "Đang xem" : "Xem / Sửa"}
                               </button>
                             </div>
                           </div>
@@ -655,6 +993,54 @@ export function CreateInvoiceScreen({
                     })}
                   </ul>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+        {isConfirmOverwriteOpen && (
+          <div
+            className="confirm-overwrite-backdrop"
+            onClick={() => setIsConfirmOverwriteOpen(false)}
+            role="presentation"
+          >
+            <div
+              className="confirm-overwrite-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="confirm-overwrite-title"
+              aria-describedby="confirm-overwrite-desc"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="confirm-overwrite-header">
+                <div className="confirm-overwrite-icon-wrap">
+                  <InvoiceIcon name="alert" size={24} />
+                </div>
+                <h3 id="confirm-overwrite-title">Xác nhận ghi đè hóa đơn đã chốt?</h3>
+              </div>
+              <p id="confirm-overwrite-desc" className="confirm-overwrite-body">
+                Hóa đơn{" "}
+                <strong>#{invoice ? String(invoice.invoiceNumber).padStart(6, "0") : ""}</strong> đã
+                hoàn thành trước đó. Ghi đè sẽ cập nhật lại danh sách mặt hàng và tổng tiền mới (
+                <strong>{invoice?.total.toLocaleString("vi-VN")} ₫</strong>). Số hóa đơn, thời điểm
+                tạo và thời điểm hoàn thành ban đầu sẽ được giữ nguyên không đổi.
+              </p>
+              <div className="confirm-overwrite-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setIsConfirmOverwriteOpen(false)}
+                  disabled={isSaving}
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  className="primary-button btn-confirm-overwrite"
+                  onClick={() => void handleConfirmOverwrite()}
+                  disabled={isSaving}
+                >
+                  {isSaving ? "Đang ghi đè…" : "Xác nhận ghi đè"}
+                </button>
               </div>
             </div>
           </div>

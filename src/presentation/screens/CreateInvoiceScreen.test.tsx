@@ -32,6 +32,19 @@ function makeDraftInvoice(items: readonly InvoiceItem[] = []): Invoice {
   });
 }
 
+function makeCompletedInvoice(items: readonly InvoiceItem[] = []): Invoice {
+  return Invoice.rehydrate({
+    id: INVOICE_ID,
+    invoiceNumber: 1,
+    status: "completed",
+    total: items.reduce((sum, item) => sum + item.payment, 0),
+    createdAt: NOW,
+    updatedAt: NOW,
+    completedAt: NOW,
+    items,
+  });
+}
+
 function makeSingleUnitProduct(): Product {
   return Product.create({
     id: PRODUCT_SINGLE_UNIT_ID,
@@ -620,5 +633,273 @@ describe("Invoice spreadsheet", () => {
       screen.getAllByText("Chưa lưu được thay đổi. Hãy thử lại ô vừa sửa.").length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("Đã lưu")).toBeNull();
+  });
+});
+
+describe("Complete and overwrite completed invoices (#19)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("disables complete button when draft invoice has no items", async () => {
+    const { actions: baseActions } = makeActions();
+    const completeSpy = vi.fn(async () => ok(makeCompletedInvoice([])));
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      completeInvoice: { execute: completeSpy },
+    };
+
+    await ready(actions);
+
+    const completeButton = screen.getByRole("button", { name: "Hoàn thành" });
+    expect(completeButton).toBeDisabled();
+    fireEvent.click(completeButton);
+    expect(completeSpy).not.toHaveBeenCalled();
+  });
+
+  it("completes a draft invoice with items successfully and clears active draft id", async () => {
+    const product = makeSingleUnitProduct();
+    const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0], 2, 29000);
+    const draft = makeDraftInvoice([item]);
+    const completed = makeCompletedInvoice([item]);
+
+    const { actions: baseActions } = makeActions(draft);
+    const completeSpy = vi.fn(async () => ok(completed));
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      completeInvoice: { execute: completeSpy },
+    };
+
+    localStorage.setItem("smart_invoice_active_draft_id", draft.id);
+
+    render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+
+    const completeButton = screen.getByRole("button", { name: "Hoàn thành" });
+    expect(completeButton).not.toBeDisabled();
+    fireEvent.click(completeButton);
+
+    await waitFor(() => {
+      expect(completeSpy).toHaveBeenCalledWith({ invoiceId: draft.id });
+    });
+
+    expect(screen.getByText("ĐÃ HOÀN TẤT")).toBeVisible();
+    expect(screen.getByText("Đã hoàn thành hóa đơn #000001")).toBeVisible();
+    expect(localStorage.getItem("smart_invoice_active_draft_id")).toBeNull();
+  });
+
+  it("shows error message when completeInvoice fails", async () => {
+    const product = makeSingleUnitProduct();
+    const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0], 2, 29000);
+    const draft = makeDraftInvoice([item]);
+
+    const { actions: baseActions } = makeActions(draft);
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      completeInvoice: {
+        execute: vi.fn(async () =>
+          err({ code: "invalid_state" as const, message: "Hóa đơn đã được chốt trước đó." }),
+        ),
+      },
+    };
+
+    render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hoàn thành" }));
+
+    await screen.findByText("Hóa đơn đã được chốt trước đó.");
+  });
+
+  it("displays completed invoices tab in the modal and allows selecting a completed invoice", async () => {
+    const product = makeSingleUnitProduct();
+    const draft = makeDraftInvoice([makeInvoiceItem(ITEM_ID_1, product, product.units[0])]);
+    const completedId = "22222222-2222-4222-8222-222222222229";
+    const completed = Invoice.rehydrate({
+      id: completedId,
+      invoiceNumber: 99,
+      status: "completed",
+      total: 58000,
+      createdAt: NOW,
+      updatedAt: NOW,
+      completedAt: NOW,
+      items: [
+        InvoiceItem.create({
+          id: "77777777-7777-4777-8777-777777777779",
+          invoiceId: completedId,
+          productId: product.id,
+          unitId: product.units[0].id,
+          productName: product.name,
+          productSku: product.sku ?? null,
+          productBrand: product.brand ?? null,
+          unitName: product.units[0].name,
+          unitPrice: 29000,
+          quantity: 2,
+          createdAt: NOW,
+        }),
+      ],
+    });
+
+    const { actions: baseActions } = makeActions(draft);
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      listInvoices: {
+        execute: vi.fn(async ({ status }) =>
+          status === "completed" ? ok([completed]) : ok([draft]),
+        ),
+      },
+    };
+
+    render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+
+    // Open modal
+    fireEvent.click(screen.getByRole("button", { name: /Bản nháp/ }));
+    expect(screen.getByRole("dialog", { name: "Bản nháp đã lưu" })).toBeVisible();
+
+    // Click Completed tab
+    const completedTab = screen.getByRole("tab", { name: /Đã hoàn thành/ });
+    fireEvent.click(completedTab);
+
+    expect(screen.getByText("#000099")).toBeVisible();
+    expect(screen.getByText("Đã chốt")).toBeVisible();
+
+    // Click view completed
+    fireEvent.click(screen.getByRole("button", { name: "Xem / Sửa" }));
+
+    await screen.findByText("#000099");
+    expect(screen.getByRole("heading", { level: 1, name: "Chi tiết hóa đơn" })).toBeVisible();
+    expect(screen.getByText("ĐÃ HOÀN TẤT")).toBeVisible();
+  });
+
+  it("stages changes in memory when editing a completed invoice without calling repository", async () => {
+    const product = makeSingleUnitProduct();
+    const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0], 1, 29000);
+    const completed = makeCompletedInvoice([item]);
+
+    const { actions: baseActions } = makeActions(completed);
+    const applySpy = vi.fn();
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      applyInvoiceItemChange: { execute: applySpy },
+    };
+
+    render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+    expect(screen.getByText("ĐÃ HOÀN TẤT")).toBeVisible();
+
+    // Change quantity
+    const qtyInput = screen.getByLabelText("Số lượng dòng 1");
+    fireEvent.change(qtyInput, { target: { value: "5" } });
+    fireEvent.keyDown(qtyInput, { key: "Enter" });
+
+    // Staged warning banner should appear
+    await screen.findByText("Hóa đơn đã chốt đang có thay đổi tạm thời.");
+    expect(applySpy).not.toHaveBeenCalled(); // Repository untouched!
+    expect(screen.getByRole("button", { name: "Lưu ghi đè" })).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Hủy thay đổi" }).length).toBeGreaterThanOrEqual(
+      1,
+    );
+
+    // Click Discard Changes
+    fireEvent.click(screen.getAllByRole("button", { name: "Hủy thay đổi" })[0]);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Hóa đơn đã chốt đang có thay đổi tạm thời.")).toBeNull();
+    });
+    expect(screen.getByLabelText("Số lượng dòng 1")).toHaveValue(1);
+  });
+
+  it("opens confirmation dialog and commits overwrite when confirmed", async () => {
+    const product = makeSingleUnitProduct();
+    const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0], 1, 29000);
+    const completed = makeCompletedInvoice([item]);
+
+    const { actions: baseActions } = makeActions(completed);
+    const overwriteSpy = vi.fn(
+      async (input: {
+        readonly invoiceId: string;
+        readonly confirmed: boolean;
+        readonly items: readonly InvoiceItem[];
+      }) => {
+        const updatedInvoice = completed.overwriteCompleted(input.items, NOW);
+        return ok(updatedInvoice);
+      },
+    );
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      overwriteCompletedInvoice: { execute: overwriteSpy },
+    };
+
+    render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+
+    // Edit quantity
+    const qtyInput = screen.getByLabelText("Số lượng dòng 1");
+    fireEvent.change(qtyInput, { target: { value: "3" } });
+    fireEvent.keyDown(qtyInput, { key: "Enter" });
+
+    await screen.findByText("Hóa đơn đã chốt đang có thay đổi tạm thời.");
+
+    // Click "Lưu ghi đè"
+    fireEvent.click(screen.getByRole("button", { name: "Lưu ghi đè" }));
+
+    // Confirmation dialog appears
+    const dialog = screen.getByRole("dialog", { name: "Xác nhận ghi đè hóa đơn đã chốt?" });
+    expect(dialog).toBeVisible();
+    expect(overwriteSpy).not.toHaveBeenCalled();
+
+    // Click "Hủy bỏ" in dialog
+    fireEvent.click(within(dialog).getByRole("button", { name: "Hủy bỏ" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Xác nhận ghi đè hóa đơn đã chốt?" })).toBeNull();
+    });
+    expect(overwriteSpy).not.toHaveBeenCalled();
+
+    // Click "Lưu ghi đè" again and confirm
+    fireEvent.click(screen.getByRole("button", { name: "Lưu ghi đè" }));
+    const confirmBtn = screen.getByRole("button", { name: "Xác nhận ghi đè" });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(overwriteSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invoiceId: completed.id,
+          confirmed: true,
+        }),
+      );
+    });
+
+    expect(screen.getByText("Đã cập nhật hóa đơn đã chốt #000001")).toBeVisible();
+    expect(screen.queryByText("Hóa đơn đã chốt đang có thay đổi tạm thời.")).toBeNull();
+  });
+
+  it("creates a new draft invoice from completed invoice view", async () => {
+    const product = makeSingleUnitProduct();
+    const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0], 1, 29000);
+    const completed = makeCompletedInvoice([item]);
+    const freshDraft = makeDraftInvoice([]);
+
+    const { actions: baseActions } = makeActions(completed);
+    const createSpy = vi
+      .fn()
+      .mockResolvedValueOnce(ok(completed))
+      .mockResolvedValueOnce(ok(freshDraft));
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      createInvoiceDraft: { execute: createSpy },
+    };
+
+    render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+
+    const newBtn = screen.getByRole("button", { name: "Tạo hóa đơn mới" });
+    fireEvent.click(newBtn);
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalled();
+    });
+    expect(screen.getByText("Tạo hóa đơn mới")).toBeVisible();
+    expect(screen.queryByText("ĐÃ HOÀN TẤT")).toBeNull();
   });
 });
