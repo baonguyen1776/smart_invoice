@@ -450,79 +450,124 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
-/* ─── Expandable Note Subrow ───────────────────────────── */
-.invoice-grid .invoice-grid-note-subrow td {
-  background: #f8fafc;
-  border-top: 1px dashed #e2e8f0;
-  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
-  padding: 4px 0 !important;
-  height: 36px;
+/* ─── Option B: Compact Inline Note Inside Product Cell ─── */
+.invoice-grid td.grid-cell-product {
+  position: relative;
   vertical-align: middle;
 }
 
-.invoice-grid .note-subrow-indicator {
+.invoice-grid .product-cell-wrapper {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  color: var(--muted, #64748b);
-  font-size: 13px;
-  font-weight: bold;
-  user-select: none;
+  width: 100%;
+  height: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
-.invoice-grid .note-subrow-content {
+.invoice-grid td.grid-cell-product.has-inline-note {
+  height: 48px;
+}
+
+.invoice-grid td.grid-cell-product.has-inline-note .product-cell-wrapper {
+  min-height: 48px;
+  padding: 2px 0 3px 0;
+}
+
+.invoice-grid td.grid-cell-product.has-inline-note .invoice-grid-product {
+  height: 22px !important;
+  line-height: 22px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.invoice-grid .product-inline-note-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  color: var(--muted, #64748b);
-}
-
-.invoice-grid .invoice-subrow-note-input {
-  flex: 1;
-  height: 28px !important;
-  line-height: 28px !important;
-  font-size: 12.5px !important;
-  font-style: italic;
-  color: var(--ink, #0f172a);
-  padding: 0 8px !important;
-  background: transparent;
-  border: 1px solid transparent;
+  gap: 5px;
+  height: 20px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  animation: fadeInInlineNote 120ms ease-out;
   border-radius: 4px;
-  outline: none;
-  transition: all 150ms ease;
+  transition: background-color 120ms ease;
 }
 
-.invoice-grid .invoice-subrow-note-input:focus {
+@keyframes fadeInInlineNote {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.invoice-grid .product-inline-note-wrapper:focus-within {
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.invoice-grid .product-inline-note-wrapper svg {
+  flex-shrink: 0;
+  color: #94a3b8;
+  opacity: 0.85;
+  transition: color 120ms ease;
+}
+
+.invoice-grid .product-inline-note-wrapper:focus-within svg {
+  color: var(--primary, #2563eb);
+  opacity: 1;
+}
+
+.invoice-grid .product-inline-note-input {
+  flex: 1;
+  min-width: 0;
+  height: 20px !important;
+  line-height: 20px !important;
+  font-size: 11.5px !important;
+  font-style: italic;
+  color: #64748b;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  transition: color 120ms ease;
+}
+
+.invoice-grid .product-inline-note-input:focus {
   font-style: normal;
-  background: #ffffff !important;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  color: #0f172a !important;
 }
 
-.invoice-grid .invoice-subrow-note-input::placeholder {
+.invoice-grid .product-inline-note-input::placeholder {
   font-style: italic;
   color: #94a3b8;
+  opacity: 0.8;
 }
 
-.invoice-grid .btn-clear-note {
-  display: flex;
+.invoice-grid .btn-clear-inline-note {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: none;
   background: transparent;
   color: #94a3b8;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
+  flex-shrink: 0;
   transition: all 120ms ease;
 }
 
-.invoice-grid .btn-clear-note:hover {
+.invoice-grid .btn-clear-inline-note:hover {
   color: var(--danger, #ef4444);
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.12);
 }
 
 /* ─── Trailing Blank Row ───────────────────────────────── */

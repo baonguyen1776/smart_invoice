@@ -998,6 +998,38 @@ describe("Complete and overwrite completed invoices (#19)", () => {
       // Subrow is collapsed
       expect(screen.queryByLabelText("Nội dung ghi chú dòng 1")).toBeNull();
     });
+
+    it("renders per-line note as compact inline element inside product cell without creating extra tr subrows (Option B)", async () => {
+      const product = makeSingleUnitProduct();
+      const itemWithNote = makeInvoiceItem(
+        ITEM_ID_1,
+        product,
+        product.units[0],
+        1,
+        29000,
+        0,
+        "Đã giao trước 1 phần",
+      );
+      const { actions } = makeActions(makeDraftInvoice([itemWithNote]));
+      await ready(actions);
+
+      // Verify no extra subrow tr exists in table
+      expect(document.querySelector(".invoice-grid-note-subrow")).toBeNull();
+
+      // Verify note input is rendered inside td.grid-cell-product
+      const noteInput = screen.getByLabelText("Nội dung ghi chú dòng 1");
+      const productCell = noteInput.closest("td.grid-cell-product");
+      expect(productCell).not.toBeNull();
+      expect(productCell).toHaveClass("has-inline-note");
+
+      // Verify product input is also inside the same cell
+      const productInput = screen.getByLabelText("Tên hàng hóa dòng 1");
+      expect(productInput.closest("td.grid-cell-product")).toBe(productCell);
+
+      // Verify the tr contains exactly one row for this item
+      const tr = productCell?.closest("tr");
+      expect(tr?.getAttribute("data-row-id")).toBe(ITEM_ID_1);
+    });
   });
 
   describe("Receipt print preview modal (#37)", () => {
