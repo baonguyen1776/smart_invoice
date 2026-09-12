@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { Fragment, useState, type KeyboardEvent } from "react";
 import type { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import type { InvoiceItemChange } from "../../application/use-cases/ApplyInvoiceItemChange";
 import type { SearchProducts } from "../../application/use-cases/SearchProducts";
@@ -63,10 +63,26 @@ function moveCell(event: KeyboardEvent<HTMLTableElement>) {
 export function InvoiceLineItems(props: InvoiceLineItemsProps) {
   const grid = useInvoiceGrid(props);
   const [filter, setFilter] = useState("");
+  const [expandedNoteRowIds, setExpandedNoteRowIds] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<{
     column: SortColumn;
     direction: "ascending" | "descending";
   } | null>(null);
+
+  const toggleNoteRow = (rowId: string) => {
+    setExpandedNoteRowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) {
+        next.delete(rowId);
+      } else {
+        next.add(rowId);
+        setTimeout(() => {
+          document.getElementById(`note-input-${rowId}`)?.focus();
+        }, 0);
+      }
+      return next;
+    });
+  };
   const needle = filter.trim().toLocaleLowerCase("vi");
   const rows = grid.rows.filter(
     (row) =>
@@ -262,142 +278,204 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
                   />
                 );
                 return (
-                  <tr
-                    key={row.id}
-                    data-row-id={row.id}
-                    aria-busy={row.isSaving}
-                    className={row.isTrailing ? "invoice-grid-blank" : ""}
-                  >
-                    <td className="grid-row-number">{row.number}</td>
-                    <td>
-                      <InvoiceProductCell
-                        value={values.name}
-                        label={`Tên hàng hóa dòng ${row.number}`}
-                        isDirty={row.isDirty}
-                        error={row.error}
-                        searchProducts={props.searchProducts}
-                        onNavigateToProducts={props.onNavigateToProducts}
-                        onChange={(name) =>
-                          grid.change(row.id, {
-                            ...values,
-                            name,
-                            selection: null,
-                            product: undefined,
-                          })
-                        }
-                        onBlur={() => grid.commit(row.id)}
-                        onSelect={(selected) => {
-                          const unit = selected.units.find((entry) => entry.isActive);
-                          if (!unit) return;
-                          grid.change(row.id, {
-                            ...values,
-                            name: selected.name,
-                            product: selected,
-                            selection: {
-                              productId: selected.id,
-                              productName: selected.name,
-                              productSku: selected.sku,
-                              productBrand: selected.brand,
-                              unitId: unit.id,
-                              unitName: unit.name,
-                            },
-                            quantity: values.quantity || "1",
-                            unitPrice: props.items.some((item) => item.id === row.id)
-                              ? String(unit.price)
-                              : values.unitPrice || String(unit.price),
-                            discount: values.discount || "0",
-                          });
-                          grid.commit(row.id);
-                        }}
-                      />
-                      {(values.selection || values.note || !row.isTrailing) && (
-                        <input
-                          className={`invoice-grid-input invoice-grid-note ${values.note ? "has-value" : ""}`}
-                          data-dirty={row.isDirty}
-                          aria-label={`Ghi chú dòng ${row.number}`}
-                          placeholder="+ Ghi chú dòng..."
-                          value={values.note}
-                          onChange={(event) =>
-                            grid.change(row.id, { ...values, note: event.target.value })
+                  <Fragment key={row.id}>
+                    <tr
+                      data-row-id={row.id}
+                      aria-busy={row.isSaving}
+                      className={row.isTrailing ? "invoice-grid-blank" : ""}
+                    >
+                      <td className="grid-row-number">{row.number}</td>
+                      <td>
+                        <InvoiceProductCell
+                          value={values.name}
+                          label={`Tên hàng hóa dòng ${row.number}`}
+                          isDirty={row.isDirty}
+                          error={row.error}
+                          searchProducts={props.searchProducts}
+                          onNavigateToProducts={props.onNavigateToProducts}
+                          onChange={(name) =>
+                            grid.change(row.id, {
+                              ...values,
+                              name,
+                              selection: null,
+                              product: undefined,
+                            })
                           }
                           onBlur={() => grid.commit(row.id)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") grid.reset(row.id);
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              grid.commit(row.id);
-                              event.currentTarget
-                                .closest("tr")
-                                ?.querySelector<HTMLSelectElement>("select")
-                                ?.focus();
-                            }
+                          onSelect={(selected) => {
+                            const unit = selected.units.find((entry) => entry.isActive);
+                            if (!unit) return;
+                            grid.change(row.id, {
+                              ...values,
+                              name: selected.name,
+                              product: selected,
+                              selection: {
+                                productId: selected.id,
+                                productName: selected.name,
+                                productSku: selected.sku,
+                                productBrand: selected.brand,
+                                unitId: unit.id,
+                                unitName: unit.name,
+                              },
+                              quantity: values.quantity || "1",
+                              unitPrice: props.items.some((item) => item.id === row.id)
+                                ? String(unit.price)
+                                : values.unitPrice || String(unit.price),
+                              discount: values.discount || "0",
+                            });
+                            grid.commit(row.id);
                           }}
                         />
-                      )}
-                    </td>
-                    <td>
-                      <select
-                        className="invoice-grid-input"
-                        data-grid-cell="true"
-                        data-dirty={row.isDirty}
-                        aria-label={`Đvt dòng ${row.number}`}
-                        value={values.selection?.unitId ?? ""}
-                        onChange={(event) => {
-                          const unit = units.find((entry) => entry.id === event.target.value);
-                          if (!unit || !values.selection) return;
-                          grid.change(row.id, {
-                            ...values,
-                            product,
-                            selection: {
-                              ...values.selection,
-                              unitId: unit.id,
-                              unitName: unit.name,
-                            },
-                            unitPrice: String(unit.price),
-                          });
-                          grid.commit(row.id);
-                        }}
-                      >
-                        {!values.selection && <option value="">-</option>}
-                        {values.selection &&
-                          !units.some((unit) => unit.id === values.selection?.unitId) && (
-                            <option value={values.selection.unitId}>
-                              {values.selection.unitName}
-                            </option>
-                          )}
-                        {units.map((unit) => (
-                          <option key={unit.id} value={unit.id}>
-                            {unit.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>{numericInput("quantity", "Số lượng")}</td>
-                    <td>{numericInput("unitPrice", "Đơn giá")}</td>
-                    <td className="grid-amount">
-                      <span>{money(preview?.subtotal)}</span>
-                    </td>
-                    <td>{numericInput("discount", "CK (%)")}</td>
-                    <td className="grid-amount">
-                      <span>{money(preview?.discountAmount)}</span>
-                    </td>
-                    <td className="grid-amount grid-payment">
-                      <span>{money(preview?.payment)}</span>
-                    </td>
-                    <td>
-                      {!row.isTrailing && (
-                        <button
-                          type="button"
-                          className="btn-delete-row"
-                          aria-label={`Xóa dòng ${row.number}`}
-                          disabled={row.isSaving}
-                          onClick={() => void grid.remove(row.id)}
+                      </td>
+                      <td>
+                        <select
+                          className="invoice-grid-input"
+                          data-grid-cell="true"
+                          data-dirty={row.isDirty}
+                          aria-label={`Đvt dòng ${row.number}`}
+                          value={values.selection?.unitId ?? ""}
+                          onChange={(event) => {
+                            const unit = units.find((entry) => entry.id === event.target.value);
+                            if (!unit || !values.selection) return;
+                            grid.change(row.id, {
+                              ...values,
+                              product,
+                              selection: {
+                                ...values.selection,
+                                unitId: unit.id,
+                                unitName: unit.name,
+                              },
+                              unitPrice: String(unit.price),
+                            });
+                            grid.commit(row.id);
+                          }}
                         >
-                          <InvoiceIcon name="trash" size={15} />
-                        </button>
+                          {!values.selection && <option value="">-</option>}
+                          {values.selection &&
+                            !units.some((unit) => unit.id === values.selection?.unitId) && (
+                              <option value={values.selection.unitId}>
+                                {values.selection.unitName}
+                              </option>
+                            )}
+                          {units.map((unit) => (
+                            <option key={unit.id} value={unit.id}>
+                              {unit.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>{numericInput("quantity", "Số lượng")}</td>
+                      <td>{numericInput("unitPrice", "Đơn giá")}</td>
+                      <td className="grid-amount">
+                        <span>{money(preview?.subtotal)}</span>
+                      </td>
+                      <td>{numericInput("discount", "CK (%)")}</td>
+                      <td className="grid-amount">
+                        <span>{money(preview?.discountAmount)}</span>
+                      </td>
+                      <td className="grid-amount grid-payment">
+                        <span>{money(preview?.payment)}</span>
+                      </td>
+                      <td className="grid-row-actions">
+                        {!row.isTrailing && (
+                          <div className="row-action-buttons">
+                            <button
+                              type="button"
+                              className={`btn-row-action btn-note-row ${values.note ? "has-note" : ""}`}
+                              aria-label={
+                                values.note
+                                  ? `Sửa ghi chú dòng ${row.number}`
+                                  : `Thêm ghi chú dòng ${row.number}`
+                              }
+                              title={values.note ? `Ghi chú: ${values.note}` : "Thêm ghi chú dòng"}
+                              onClick={() => toggleNoteRow(row.id)}
+                            >
+                              <InvoiceIcon name="note" size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-row-action btn-delete-row"
+                              aria-label={`Xóa dòng ${row.number}`}
+                              disabled={row.isSaving}
+                              onClick={() => void grid.remove(row.id)}
+                            >
+                              <InvoiceIcon name="trash" size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    {(expandedNoteRowIds.has(row.id) || Boolean(values.note)) &&
+                      !row.isTrailing && (
+                        <tr key={`${row.id}-note`} className="invoice-grid-note-subrow">
+                          <td className="grid-row-number">
+                            <span className="note-subrow-indicator" aria-hidden="true">
+                              ↳
+                            </span>
+                          </td>
+                          <td colSpan={8} className="note-subrow-cell">
+                            <div className="note-subrow-content">
+                              <InvoiceIcon name="note" size={13} style={{ flexShrink: 0 }} />
+                              <input
+                                id={`note-input-${row.id}`}
+                                className="invoice-subrow-note-input"
+                                aria-label={`Nội dung ghi chú dòng ${row.number}`}
+                                data-dirty={row.isDirty}
+                                placeholder="Nhập ghi chú cho dòng này (VD: Đã giao trước 5 cuốn, hàng khuyến mãi...)"
+                                value={values.note}
+                                onChange={(event) =>
+                                  grid.change(row.id, { ...values, note: event.target.value })
+                                }
+                                onBlur={() => {
+                                  grid.commit(row.id);
+                                  if (!values.note.trim()) {
+                                    setExpandedNoteRowIds((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(row.id);
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape") {
+                                    grid.reset(row.id);
+                                    setExpandedNoteRowIds((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(row.id);
+                                      return next;
+                                    });
+                                  }
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    grid.commit(row.id);
+                                  }
+                                }}
+                              />
+                              {values.note && (
+                                <button
+                                  type="button"
+                                  className="btn-clear-note"
+                                  title="Xóa ghi chú này"
+                                  aria-label={`Xóa ghi chú dòng ${row.number}`}
+                                  onClick={() => {
+                                    grid.change(row.id, { ...values, note: "" });
+                                    grid.commit(row.id);
+                                    setExpandedNoteRowIds((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(row.id);
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  <InvoiceIcon name="close" size={12} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="note-subrow-actions"></td>
+                        </tr>
                       )}
-                    </td>
-                  </tr>
+                  </Fragment>
                 );
               })
             )}

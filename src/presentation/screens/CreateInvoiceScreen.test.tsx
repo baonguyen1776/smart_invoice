@@ -105,6 +105,8 @@ function makeInvoiceItem(
   unit: Unit,
   quantity = 1,
   unitPrice = unit.price,
+  discountBasisPoints = 0,
+  note?: string,
 ): InvoiceItem {
   return InvoiceItem.create({
     id,
@@ -117,6 +119,8 @@ function makeInvoiceItem(
     unitName: unit.name,
     unitPrice,
     quantity,
+    discountBasisPoints,
+    note,
     createdAt: NOW,
   });
 }
@@ -904,11 +908,15 @@ describe("Complete and overwrite completed invoices (#19)", () => {
   });
 
   describe("Line item notes (#29)", () => {
-    it("allows entering a per-line note and persists it via semantic change", async () => {
+    it("allows entering a per-line note via note action button and persists it via semantic change", async () => {
       const { actions } = populated();
       await ready(actions);
 
-      const noteInput = screen.getByLabelText("Ghi chú dòng 1");
+      // Click note action button next to trash button
+      const noteBtn = screen.getByRole("button", { name: "Thêm ghi chú dòng 1" });
+      fireEvent.click(noteBtn);
+
+      const noteInput = screen.getByLabelText("Nội dung ghi chú dòng 1");
       expect(noteInput).toHaveValue("");
 
       fireEvent.change(noteInput, { target: { value: "Đã giao đợt 1" } });
@@ -932,7 +940,11 @@ describe("Complete and overwrite completed invoices (#19)", () => {
       const { actions } = populated();
       await ready(actions);
 
-      const noteInput = screen.getByLabelText("Ghi chú dòng 1");
+      // Click note action button to open subrow
+      const noteBtn = screen.getByRole("button", { name: "Thêm ghi chú dòng 1" });
+      fireEvent.click(noteBtn);
+
+      const noteInput = screen.getByLabelText("Nội dung ghi chú dòng 1");
       fireEvent.change(noteInput, { target: { value: "hàng tặng khuyến mãi" } });
       fireEvent.blur(noteInput);
 
@@ -947,6 +959,44 @@ describe("Complete and overwrite completed invoices (#19)", () => {
 
       fireEvent.change(filterInput, { target: { value: "không tồn tại" } });
       expect(screen.queryByLabelText("Tên hàng hóa dòng 1")).toBeNull();
+    });
+
+    it("clears per-line note via clear button and collapses the subrow", async () => {
+      const product = makeSingleUnitProduct();
+      const itemWithNote = makeInvoiceItem(
+        ITEM_ID_1,
+        product,
+        product.units[0],
+        1,
+        29000,
+        0,
+        "Đã giao trước 1 phần",
+      );
+      const { actions } = makeActions(makeDraftInvoice([itemWithNote]));
+      await ready(actions);
+
+      // Note subrow is automatically visible because note has content
+      const noteInput = screen.getByLabelText("Nội dung ghi chú dòng 1");
+      expect(noteInput).toHaveValue("Đã giao trước 1 phần");
+
+      const clearBtn = screen.getByLabelText("Xóa ghi chú dòng 1");
+      fireEvent.click(clearBtn);
+
+      await waitFor(() => {
+        expect(actions.applyInvoiceItemChange.execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            change: expect.objectContaining({
+              type: "update",
+              values: expect.objectContaining({
+                note: null,
+              }),
+            }),
+          }),
+        );
+      });
+
+      // Subrow is collapsed
+      expect(screen.queryByLabelText("Nội dung ghi chú dòng 1")).toBeNull();
     });
   });
 
