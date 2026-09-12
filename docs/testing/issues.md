@@ -179,6 +179,40 @@ Verification checks passed on 2026-09-12.
   - 33/33 Rust tests pass.
   - `npm run typecheck` and `npm run lint`: clean (0 errors, 0 warnings).
 
+## Issue #19 — Complete Invoices and Confirmed Overwrite of Completed Edits
+
+Verification checks passed on 2026-09-12.
+
+- **Objective**:
+  Implement the draft invoice completion workflow (`draft -> completed`) and safe, confirmed overwrite editing for completed invoices as defined in UC-01 and Sprint 3 (UX-006 & UX-007).
+- **Architectural & Design Implementation**:
+  1. **Domain & Application**: Wired existing application use-cases `CompleteInvoice` and `OverwriteCompletedInvoice` into UI presentation layer through `InvoiceScreenActions`.
+  2. **Draft Completion**:
+     - Completed via button "Hoàn thành" in `CreateInvoiceScreen.tsx`, requiring at least 1 line item.
+     - Persists completion via `CompleteInvoice`, setting immutable `completed_at` timestamp.
+     - Clears `smart_invoice_active_draft_id` from `localStorage` upon completion to prevent stale recovery.
+     - Updates header badge to `[ ĐÃ HOÀN TẤT ]` and displays confirmation feedback.
+  3. **Completed Invoice Browsing**:
+     - Upgraded Invoices modal with tabs `[ Bản nháp (n) ]` and `[ Đã hoàn thành (m) ]`.
+     - Displays formatted invoice numbers, timestamps, item counts, customer info, and total amounts.
+     - Supports viewing and reopening completed invoices into the main workspace.
+  4. **Protected In-Memory Staged Edits**:
+     - Modifying line items on a completed invoice applies in-memory changes via `applyItemChangeInMemory` and domain method `invoice.overwriteCompleted(nextItems, now)`.
+     - Avoids silent auto-save to prevent corrupting completed records.
+     - Displays high-visibility staged changes alert banner (`notice-staged-changes`).
+     - Provides instant "Hủy thay đổi" action to revert in-memory edits to the original persisted state.
+  5. **Atomic Overwrite with Confirmation**:
+     - "Lưu ghi đè" opens a dedicated Overwrite Confirmation Dialog displaying invoice number and recalculated total.
+     - Confirming executes `actions.overwriteCompletedInvoice.execute({ invoiceId, confirmed: true, items })`.
+     - Preserves immutable identities (`id`, `invoice_number`, `created_at`, `completed_at`, `status = "completed"`).
+  6. **Fresh Draft Creation**:
+     - "Tạo hóa đơn mới" allows cashiers to immediately spin up a new draft without modifying the completed invoice.
+- **Verification Evidence**:
+  - TypeScript & ESLint: 0 errors, 0 warnings (`npm run typecheck && npm run lint`).
+  - Vitest: 196/196 tests pass across 16 test files (added 7 new tests in `CreateInvoiceScreen.test.tsx` verifying completion, error states, modal tab switching, in-memory staging, revert, overwrite confirmation, and new draft creation).
+  - Rust: 35/35 unit tests pass (`cargo test --manifest-path src-tauri/Cargo.toml`).
+  - Production build: `npm run build` succeeds cleanly.
+
 ## Run checks
 
 From the repository root; native smoke requires a graphical desktop, creates an isolated profile and times out after 30 seconds per process.
