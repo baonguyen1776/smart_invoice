@@ -902,4 +902,51 @@ describe("Complete and overwrite completed invoices (#19)", () => {
     expect(screen.getByText("Tạo hóa đơn mới")).toBeVisible();
     expect(screen.queryByText("ĐÃ HOÀN TẤT")).toBeNull();
   });
+
+  describe("Line item notes (#29)", () => {
+    it("allows entering a per-line note and persists it via semantic change", async () => {
+      const { actions } = populated();
+      await ready(actions);
+
+      const noteInput = screen.getByLabelText("Ghi chú dòng 1");
+      expect(noteInput).toHaveValue("");
+
+      fireEvent.change(noteInput, { target: { value: "Đã giao đợt 1" } });
+      fireEvent.blur(noteInput);
+
+      await waitFor(() => {
+        expect(actions.applyInvoiceItemChange.execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            change: expect.objectContaining({
+              type: "update",
+              values: expect.objectContaining({
+                note: "Đã giao đợt 1",
+              }),
+            }),
+          }),
+        );
+      });
+    });
+
+    it("filters line items by per-line note keyword", async () => {
+      const { actions } = populated();
+      await ready(actions);
+
+      const noteInput = screen.getByLabelText("Ghi chú dòng 1");
+      fireEvent.change(noteInput, { target: { value: "hàng tặng khuyến mãi" } });
+      fireEvent.blur(noteInput);
+
+      await waitFor(() => {
+        expect(actions.applyInvoiceItemChange.execute).toHaveBeenCalled();
+      });
+
+      const filterInput = screen.getByPlaceholderText("Lọc hàng hóa…");
+      fireEvent.change(filterInput, { target: { value: "khuyến mãi" } });
+
+      expect(screen.getByLabelText("Tên hàng hóa dòng 1")).toBeVisible();
+
+      fireEvent.change(filterInput, { target: { value: "không tồn tại" } });
+      expect(screen.queryByLabelText("Tên hàng hóa dòng 1")).toBeNull();
+    });
+  });
 });

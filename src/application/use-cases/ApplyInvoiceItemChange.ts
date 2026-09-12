@@ -19,6 +19,7 @@ interface AddItemChange {
   readonly unitName: string;
   readonly unitPrice: number;
   readonly quantity: number;
+  readonly note?: string | null;
 }
 
 interface RemoveItemChange {
@@ -39,7 +40,11 @@ interface UpdatePriceChange {
 }
 
 export type InvoiceItemChange =
-  AddItemChange | RemoveItemChange | UpdateQuantityChange | UpdatePriceChange | { readonly type: "update"; readonly itemId: string; readonly values: UpdateInvoiceItemInput };
+  | AddItemChange
+  | RemoveItemChange
+  | UpdateQuantityChange
+  | UpdatePriceChange
+  | { readonly type: "update"; readonly itemId: string; readonly values: UpdateInvoiceItemInput };
 
 export interface ApplyInvoiceItemChangeInput {
   readonly invoiceId: string;
@@ -97,6 +102,7 @@ export class ApplyInvoiceItemChange {
           unitName: change.unitName,
           unitPrice: change.unitPrice,
           quantity: change.quantity,
+          note: change.note,
           createdAt: now,
         }),
       ];

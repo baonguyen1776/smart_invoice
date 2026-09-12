@@ -374,9 +374,7 @@ export function ProductManagementScreen({
           ) : products.length === 0 ? (
             <div className="empty-state">
               <strong>
-                {statusFilter === "inactive"
-                  ? "Không có sản phẩm ngưng bán"
-                  : "Chưa có sản phẩm"}
+                {statusFilter === "inactive" ? "Không có sản phẩm ngưng bán" : "Chưa có sản phẩm"}
               </strong>
               {statusFilter !== "inactive" && (
                 <button className="primary-button" type="button" onClick={openCreateForm}>

@@ -63,7 +63,9 @@
   height: 34px;
   width: 260px;
   max-width: 100%;
-  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+  transition:
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast);
 }
 
 .invoice-line-filter:focus-within {
@@ -107,16 +109,36 @@
 }
 
 /* ─── Column widths ────────────────────────────────────── */
-.grid-col-number           { width: 44px; }
-.grid-col-name             { width: 23%; }
-.grid-col-unit             { width: 8.5%; }
-.grid-col-quantity         { width: 7.5%; }
-.grid-col-price            { width: 11.5%; }
-.grid-col-subtotal         { width: 12%; }
-.grid-col-discount         { width: 7.5%; }
-.grid-col-discount-amount  { width: 11.5%; }
-.grid-col-payment          { width: 14%; }
-.grid-col-delete           { width: 42px; }
+.grid-col-number {
+  width: 44px;
+}
+.grid-col-name {
+  width: 23%;
+}
+.grid-col-unit {
+  width: 8.5%;
+}
+.grid-col-quantity {
+  width: 7.5%;
+}
+.grid-col-price {
+  width: 11.5%;
+}
+.grid-col-subtotal {
+  width: 12%;
+}
+.grid-col-discount {
+  width: 7.5%;
+}
+.grid-col-discount-amount {
+  width: 11.5%;
+}
+.grid-col-payment {
+  width: 14%;
+}
+.grid-col-delete {
+  width: 42px;
+}
 
 /* ─── Header row ───────────────────────────────────────── */
 .invoice-grid thead th {
@@ -169,7 +191,7 @@
   text-align: left;
 }
 
-.invoice-grid th:nth-child(n+4):not(:last-child) button {
+.invoice-grid th:nth-child(n + 4):not(:last-child) button {
   justify-content: flex-end;
   text-align: right;
 }
@@ -304,6 +326,41 @@
   text-overflow: ellipsis;
 }
 
+/* Line item note annotation */
+.invoice-grid-note {
+  display: block;
+  width: 100%;
+  font-size: 11.5px !important;
+  line-height: 18px !important;
+  height: 20px !important;
+  padding: 0 12px 3px !important;
+  margin-top: -6px;
+  color: var(--muted, #64748b) !important;
+  font-style: italic;
+  background: transparent;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.invoice-grid-note::placeholder {
+  font-style: normal;
+  color: var(--border-strong, #94a3b8);
+  opacity: 0.65;
+}
+
+.invoice-grid-note:focus {
+  font-style: normal;
+  color: var(--ink) !important;
+  background: rgba(37, 99, 235, 0.05) !important;
+}
+
+.invoice-grid-note.has-value {
+  color: #2563eb !important;
+  font-weight: 500;
+}
+
 /* Unit select dropdown */
 .invoice-grid select.invoice-grid-input {
   cursor: pointer;
@@ -387,7 +444,10 @@
   border-radius: 6px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 150ms ease, background 150ms ease, color 150ms ease;
+  transition:
+    opacity 150ms ease,
+    background 150ms ease,
+    color 150ms ease;
 }
 
 .invoice-grid tr:hover .btn-delete-row,
@@ -483,7 +543,9 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
   color: var(--ink);
   font-size: 13px;
 }
@@ -536,5 +598,7 @@
 /* ─── Reduced motion ───────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .invoice-grid *,
-  .invoice-grid-suggestions * { transition: none !important; }
+  .invoice-grid-suggestions * {
+    transition: none !important;
+  }
 }

@@ -16,6 +16,7 @@ export interface InvoiceRowValues {
   readonly quantity: string;
   readonly unitPrice: string;
   readonly discount: string;
+  readonly note: string;
 }
 export interface InvoiceRowDraft {
   readonly values: InvoiceRowValues;
@@ -28,6 +29,7 @@ const EMPTY_VALUES: InvoiceRowValues = {
   quantity: "",
   unitPrice: "",
   discount: "",
+  note: "",
 };
 
 export function invoiceRowValues(item?: InvoiceItem): InvoiceRowValues {
@@ -45,6 +47,7 @@ export function invoiceRowValues(item?: InvoiceItem): InvoiceRowValues {
     quantity: String(item.quantity),
     unitPrice: String(item.unitPrice),
     discount: String(item.discountBasisPoints / 100),
+    note: item.note ?? "",
   };
 }
 
@@ -63,7 +66,8 @@ function rowInput(values: InvoiceRowValues) {
   } catch {
     throw new Error("Giá trị hoặc thành tiền vượt giới hạn hợp lệ.");
   }
-  return { ...values.selection, quantity, unitPrice, discountBasisPoints };
+  const note = values.note.trim() ? values.note.trim() : null;
+  return { ...values.selection, quantity, unitPrice, discountBasisPoints, note };
 }
 
 export function previewInvoiceRow(values: InvoiceRowValues): InvoiceLineAmounts | null {
@@ -117,7 +121,7 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
     const revision = (draftRef.current[id]?.revision ?? 0) + 1;
     putDraft(id, { values, revision });
     setOrder((current) =>
-      (values.name || values.quantity || values.unitPrice || values.discount) &&
+      (values.name || values.quantity || values.unitPrice || values.discount || values.note) &&
       current[current.length - 1] === id
         ? [...current, crypto.randomUUID()]
         : current,
@@ -159,6 +163,7 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
                   quantity: input.quantity,
                   unitPrice: input.unitPrice,
                   discountBasisPoints: input.discountBasisPoints,
+                  note: input.note,
                   selection: draft.values.selection!,
                 },
               }

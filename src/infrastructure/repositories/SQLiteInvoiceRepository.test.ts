@@ -177,6 +177,58 @@ describe("SQLiteInvoiceRepository", () => {
     expect(result.value).toHaveLength(1);
     expect(result.value[0].id).toBe(validDraft.id);
   });
+
+  it("serializes and rehydrates line item notes accurately", async () => {
+    const itemWithNote = InvoiceItem.create({
+      ...makeItem().toState(),
+      note: "Hàng giao trước",
+    });
+    const commandInvoker = vi.fn<CommandInvoker>().mockResolvedValue(undefined);
+    const repository = new SQLiteInvoiceRepository(commandInvoker);
+    const invoice = makeDraft().replaceDraftItems([itemWithNote], NOW);
+
+    await repository.saveDraft(invoice);
+    expect(commandInvoker).toHaveBeenCalledWith("save_invoice_draft", {
+      invoice: expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            note: "Hàng giao trước",
+          }),
+        ],
+      }),
+    });
+
+    commandInvoker.mockResolvedValue({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      status: "draft",
+      total: 20_000,
+      createdAt: NOW,
+      updatedAt: NOW,
+      completedAt: null,
+      items: [
+        {
+          id: itemWithNote.id,
+          invoiceId: itemWithNote.invoiceId,
+          productId: itemWithNote.productId,
+          unitId: itemWithNote.unitId,
+          productName: itemWithNote.productName,
+          productSku: itemWithNote.productSku,
+          productBrand: itemWithNote.productBrand,
+          unitName: itemWithNote.unitName,
+          unitPrice: itemWithNote.unitPrice,
+          quantity: itemWithNote.quantity,
+          subtotal: itemWithNote.subtotal,
+          discountBasisPoints: 0,
+          note: "Hàng giao trước",
+          createdAt: itemWithNote.createdAt,
+        },
+      ],
+    });
+
+    const fetched = await repository.findById(INVOICE_ID);
+    expect(fetched.ok && fetched.value?.items[0].note).toBe("Hàng giao trước");
+  });
 });
 
 it("round-trips persisted discount basis points and net totals through the command DTO", async () => {
