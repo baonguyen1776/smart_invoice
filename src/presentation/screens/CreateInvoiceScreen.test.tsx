@@ -182,7 +182,7 @@ describe("Invoice spreadsheet", () => {
   it("starts with one focused editable row and appends only after input", async () => {
     const { actions } = makeActions();
     await ready(actions);
-    expect(input("Tên hàng hóa dòng 1")).toHaveFocus();
+    await waitFor(() => expect(input("Tên hàng hóa dòng 1")).toHaveFocus());
     expect(input("Tên hàng hóa dòng 1")).toHaveAttribute("placeholder", "-");
     expect(screen.queryByLabelText("Tên hàng hóa dòng 2")).not.toBeInTheDocument();
     edit("Tên hàng hóa dòng 1", "C");
@@ -947,6 +947,78 @@ describe("Complete and overwrite completed invoices (#19)", () => {
 
       fireEvent.change(filterInput, { target: { value: "không tồn tại" } });
       expect(screen.queryByLabelText("Tên hàng hóa dòng 1")).toBeNull();
+    });
+  });
+
+  describe("Receipt print preview modal (#37)", () => {
+    it("automatically opens receipt print preview modal upon invoice completion", async () => {
+      const product = makeSingleUnitProduct();
+      const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0], 2, 29000);
+      const draft = makeDraftInvoice([item]);
+      const completed = makeCompletedInvoice([item]);
+
+      const { actions: baseActions } = makeActions(draft);
+      const completeSpy = vi.fn(async () => ok(completed));
+      const actions: InvoiceScreenActions = {
+        ...baseActions,
+        completeInvoice: { execute: completeSpy },
+      };
+
+      render(<CreateInvoiceScreen actions={actions} />);
+      await screen.findByText("#000001");
+
+      const completeButton = screen.getByRole("button", { name: "Hoàn thành" });
+      fireEvent.click(completeButton);
+
+      await waitFor(() => {
+        expect(completeSpy).toHaveBeenCalled();
+      });
+
+      // Receipt preview modal should appear with "THU BA" branding
+      expect(screen.getByRole("dialog", { name: "Xem trước phiếu in hóa đơn" })).toBeVisible();
+      expect(screen.getByRole("heading", { name: "THU BA" })).toBeVisible();
+      expect(
+        screen.getByText("Địa chỉ : 299 -đường 3/2 - Ô 1 - khu 2 - xã Chợ Gạo - Đồng Tháp"),
+      ).toBeVisible();
+      expect(screen.getByText("SĐT : 0989,601,556 - 0984,831,636")).toBeVisible();
+    });
+
+    it("resets checkout workspace to new draft when clicking 'Đóng & Tạo đơn mới' in receipt preview", async () => {
+      const product = makeSingleUnitProduct();
+      const item = makeInvoiceItem(ITEM_ID_1, product, product.units[0], 1, 29000);
+      const completed = makeCompletedInvoice([item]);
+      const freshDraft = makeDraftInvoice([]);
+
+      const { actions: baseActions } = makeActions(completed);
+      const createSpy = vi
+        .fn()
+        .mockResolvedValueOnce(ok(completed))
+        .mockResolvedValueOnce(ok(freshDraft));
+      const actions: InvoiceScreenActions = {
+        ...baseActions,
+        createInvoiceDraft: { execute: createSpy },
+      };
+
+      render(<CreateInvoiceScreen actions={actions} />);
+      await screen.findByText("#000001");
+
+      // Click "In hóa đơn" on completed invoice to open modal
+      const printBtn = screen.getByRole("button", { name: "In hóa đơn" });
+      fireEvent.click(printBtn);
+
+      expect(screen.getByRole("dialog", { name: "Xem trước phiếu in hóa đơn" })).toBeVisible();
+
+      // Click "Đóng & Tạo đơn mới"
+      const newDraftBtn = screen.getByRole("button", { name: /Đóng & Tạo đơn mới/i });
+      fireEvent.click(newDraftBtn);
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalled();
+      });
+
+      // Modal closed, back to new draft workspace
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByText("Tạo hóa đơn mới")).toBeVisible();
     });
   });
 });
