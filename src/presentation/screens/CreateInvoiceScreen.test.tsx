@@ -233,7 +233,7 @@ describe("Invoice spreadsheet", () => {
     );
   });
 
-  it.each(["", "0", "-1", "1.5", "9007199254740992"])(
+  it.each(["", "0", "1.5", "-1.5", "abc", "9007199254740992", "-9007199254740992"])(
     "rejects invalid quantity %s without saving",
     async (value) => {
       const { actions } = populated();
@@ -243,6 +243,17 @@ describe("Invoice spreadsheet", () => {
       expect(actions.applyInvoiceItemChange.execute).not.toHaveBeenCalled();
     },
   );
+
+  it("accepts negative quantity for return items and formats parenthesized negative amounts", async () => {
+    const { actions, repository } = populated();
+    await ready(actions);
+    fireEvent.blur(edit("Số lượng dòng 1", "-2"));
+    await waitFor(() => expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].quantity).toBe(-2));
+    expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].subtotal).toBe(-58000);
+    expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent(
+      "(58.000 ₫)",
+    );
+  });
 
   it.each(["-1", "100.01", "1.234", "abc", "1e1"])("rejects invalid CK %s", async (value) => {
     const { actions } = populated();
@@ -478,6 +489,50 @@ describe("Invoice spreadsheet", () => {
     expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent(
       "29.000 ₫",
     );
+  });
+
+  it("switches between drafts even if an input was dirty, cleanly resetting items", async () => {
+    const product = makeSingleUnitProduct();
+    const draft1 = makeDraftInvoice([makeInvoiceItem(ITEM_ID_1, product, product.units[0])]);
+    const draft2 = Invoice.rehydrate({
+      id: "99999999-9999-4999-8999-999999999999",
+      invoiceNumber: 2,
+      status: "draft",
+      total: 0,
+      createdAt: NOW,
+      updatedAt: NOW,
+      completedAt: null,
+      items: [],
+    });
+
+    const { actions: baseActions } = makeActions(draft1);
+    const actions: InvoiceScreenActions = {
+      ...baseActions,
+      listInvoices: {
+        execute: vi.fn(async () => ok([draft1, draft2])),
+      },
+    };
+
+    render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+    expect(screen.getByDisplayValue("Cà phê sữa đá")).toBeVisible();
+
+    // Mark an input dirty
+    const qtyInput = screen.getByLabelText("Số lượng dòng 1");
+    fireEvent.change(qtyInput, { target: { value: "999" } });
+
+    // Open drafts list
+    fireEvent.click(screen.getByRole("button", { name: /Bản nháp/ }));
+    expect(screen.getByRole("dialog", { name: "Bản nháp đã lưu" })).toBeVisible();
+
+    // Switch to draft 2 (empty draft)
+    const openDraft2Button = screen.getByRole("button", { name: "Mở bản nháp" });
+    fireEvent.click(openDraft2Button);
+
+    // Draft 2 is now open and has NO items (not even phantom rows)
+    await screen.findByText("#000002");
+    expect(screen.queryByDisplayValue("Cà phê sữa đá")).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent("-");
   });
 
   it("allows deleting a draft from the drafts modal", async () => {

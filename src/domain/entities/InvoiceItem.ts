@@ -121,8 +121,8 @@ export class InvoiceItem {
     validateTimestamp(input.createdAt, "createdAt");
     validateMoney(input.unitPrice, "unitPrice");
 
-    if (!Number.isSafeInteger(input.quantity) || input.quantity < 1) {
-      throw new InvoiceItemValidationError("quantity must be a positive safe integer.");
+    if (!Number.isSafeInteger(input.quantity) || input.quantity === 0) {
+      throw new InvoiceItemValidationError("quantity must be a non-zero safe integer.");
     }
 
     const discountBasisPoints = input.discountBasisPoints ?? 0;

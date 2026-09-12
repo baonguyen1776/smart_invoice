@@ -138,7 +138,7 @@ export class Invoice {
     validateItems(state.id, state.items);
 
     const total = calculateTotal(state.items);
-    if (state.total !== total) {
+    if (state.status === "completed" && state.total !== total) {
       throw new InvoiceValidationError("total must equal the sum of item payments.");
     }
 
@@ -172,7 +172,7 @@ function calculateTotal(items: readonly InvoiceItem[]): number {
   try {
     return sumInvoiceAmounts(items).payment;
   } catch {
-    throw new InvoiceValidationError("Invoice total must be a non-negative safe integer.");
+    throw new InvoiceValidationError("Invoice total exceeds the safe integer range.");
   }
 }
 

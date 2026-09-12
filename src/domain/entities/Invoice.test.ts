@@ -83,6 +83,20 @@ describe("Invoice", () => {
     expect(() => completed.replaceDraftItems([], UPDATED_AT)).toThrow(/completed/i);
   });
 
+  it("allows invoices with return items and negative total", () => {
+    const invoice = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      createdAt: CREATED_AT,
+    });
+    const returnItem = item(ITEM_ID, 3700, -10);
+    const updated = invoice.replaceDraftItems([returnItem], UPDATED_AT);
+    expect(updated.total).toBe(-37000);
+    const completed = updated.complete(COMPLETED_AT);
+    expect(completed.status).toBe("completed");
+    expect(completed.total).toBe(-37000);
+  });
+
   it("overwrites a completed invoice while preserving its identity and completion time", () => {
     const completed = Invoice.createDraft({
       id: INVOICE_ID,
@@ -113,4 +127,34 @@ describe("Invoice", () => {
       ).toThrow(InvoiceValidationError);
     },
   );
+
+  it("reconciles mismatched totals for drafts upon rehydration without throwing", () => {
+    const draft = Invoice.rehydrate({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      status: "draft",
+      total: 999_000,
+      createdAt: CREATED_AT,
+      updatedAt: UPDATED_AT,
+      completedAt: null,
+      items: [],
+    });
+
+    expect(draft.total).toBe(0);
+  });
+
+  it("rejects mismatched totals for completed invoices upon rehydration", () => {
+    expect(() =>
+      Invoice.rehydrate({
+        id: INVOICE_ID,
+        invoiceNumber: 1,
+        status: "completed",
+        total: 999_000,
+        createdAt: CREATED_AT,
+        updatedAt: UPDATED_AT,
+        completedAt: COMPLETED_AT,
+        items: [item()],
+      }),
+    ).toThrow(InvoiceValidationError);
+  });
 });

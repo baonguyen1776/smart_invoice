@@ -38,6 +38,15 @@ describe("InvoiceItem", () => {
     });
   });
 
+  it("supports negative quantity return line and calculates negative subtotal", () => {
+    const item = InvoiceItem.create({ ...validInput(), quantity: -10, unitPrice: 3_700 });
+    expect(item).toMatchObject({
+      quantity: -10,
+      unitPrice: 3_700,
+      subtotal: -37_000,
+    });
+  });
+
   it.each([
     ["id", { id: "not-a-uuid" }],
     ["invoiceId", { invoiceId: "not-a-uuid" }],

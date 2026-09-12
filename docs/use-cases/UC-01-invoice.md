@@ -38,6 +38,7 @@ graph LR
 ### Alternate flow
 - **A1 (VIP price):** Manually edit the price in steps 5/6 if the customer is a VIP
 - **A2 (Edit a completed invoice):** Reopen a `completed` invoice → edit it → the system displays a confirmation dialog → if confirmed, the new data overwrites the old data
+- **A3 (Return/Deduction line):** Enter a negative integer quantity (e.g. `-10`) to record goods returned or credit deduction from a previous invoice. The system computes negative subtotal and payment amounts, displayed using Vietnamese accounting convention `(37.000 ₫)` (parenthesized negative amounts). Net invoice total may be negative (credit balance).
 
 ### Exception flow
 - **E1:** No matching product is found → display a notification and suggest using UC-02 to add a new product
@@ -51,10 +52,11 @@ graph LR
 - `Invoice.id` and every `InvoiceItem.id` are UUID v4 strings.
 - `invoice_number` is a positive unique integer assigned when the draft is
   created. Number gaps are allowed.
-- Money is stored as non-negative integer VND values; floating-point money is
-  forbidden.
-- Quantity is a positive integer. Fractional quantities and unit conversions
-  are outside the MVP.
+- Money is stored as integer VND values; floating-point money is forbidden.
+  Negative money is allowed for return lines and net-credit invoice totals.
+- Quantity is a non-zero safe integer (positive for sales, negative for customer
+  returns/deductions; zero remains rejected). Fractional quantities and unit
+  conversions are outside the MVP.
 - A VIP price override changes the transaction-time `InvoiceItem.unit_price`;
   it never changes the selected Unit's catalog price.
 

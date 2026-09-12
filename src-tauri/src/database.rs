@@ -412,7 +412,12 @@ fn calculate_and_validate_total(
     let mut total: i64 = 0;
     let mut gross: i64 = 0;
     for item in items {
-        if item.subtotal < 0 || item.subtotal > MAX_SAFE_INTEGER {
+        if item.quantity == 0 || !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&item.quantity) {
+            return Err(sqlx::Error::Protocol(
+                "Item quantity out of safe integer range.".into(),
+            ));
+        }
+        if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&item.subtotal) {
             return Err(sqlx::Error::Protocol(
                 "Item subtotal out of safe integer range.".into(),
             ));
@@ -431,13 +436,16 @@ fn calculate_and_validate_total(
                 "Invalid discount basis points.".into(),
             ));
         }
-        let discount = ((i128::from(item.subtotal) * i128::from(item.discount_basis_points)
-            + 5_000)
-            / 10_000) as i64;
+        let raw_discount = i128::from(item.subtotal) * i128::from(item.discount_basis_points);
+        let discount = (if raw_discount >= 0 {
+            (raw_discount + 5_000) / 10_000
+        } else {
+            (raw_discount - 5_000) / 10_000
+        }) as i64;
         gross = gross
             .checked_add(item.subtotal)
             .ok_or_else(|| sqlx::Error::Protocol("Invoice gross amount overflow.".into()))?;
-        if gross > MAX_SAFE_INTEGER {
+        if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&gross) {
             return Err(sqlx::Error::Protocol(
                 "Invoice gross amount exceeds safe integer limit.".into(),
             ));
@@ -445,7 +453,7 @@ fn calculate_and_validate_total(
         total = total
             .checked_add(item.subtotal - discount)
             .ok_or_else(|| sqlx::Error::Protocol("Invoice total arithmetic overflow.".into()))?;
-        if total > MAX_SAFE_INTEGER {
+        if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&total) {
             return Err(sqlx::Error::Protocol(
                 "Invoice total exceeds safe integer limit.".into(),
             ));

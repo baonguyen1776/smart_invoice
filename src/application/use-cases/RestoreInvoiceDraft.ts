@@ -19,10 +19,7 @@ export class RestoreInvoiceDraft {
   async execute(input?: RestoreInvoiceDraftInput): Promise<Result<Invoice, InvoiceError>> {
     if (input?.preferredInvoiceId) {
       const existing = await this.repository.findById(input.preferredInvoiceId);
-      if (!existing.ok) {
-        return existing;
-      }
-      if (existing.value !== null && existing.value.status === "draft") {
+      if (existing.ok && existing.value !== null && existing.value.status === "draft") {
         return { ok: true, value: existing.value };
       }
     }

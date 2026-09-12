@@ -611,7 +611,7 @@ Required constraints and indexes:
 
 - `CHECK (invoice_number BETWEEN 1 AND 9007199254740991)`.
 - `CHECK (status IN ('draft', 'completed'))`.
-- `CHECK (total BETWEEN 0 AND 9007199254740991)`.
+- `CHECK (total BETWEEN -9007199254740991 AND 9007199254740991)` (widened in migration `0005`).
 - A status/timestamp consistency check requires `completed_at IS NULL` while
   status is `draft` and `completed_at IS NOT NULL` while status is `completed`.
 - Indexes support status and `created_at` history queries.
@@ -644,8 +644,8 @@ State rules:
 | `product_brand` | nullable `TEXT` | transaction-time snapshot |
 | `unit_name` | `TEXT NOT NULL` | transaction-time snapshot |
 | `unit_price` | `INTEGER NOT NULL` | actual transaction price, including VIP override |
-| `quantity` | `INTEGER NOT NULL` | positive integer |
-| `subtotal` | `INTEGER NOT NULL` | `unit_price * quantity`, before discount |
+| `quantity` | `INTEGER NOT NULL` | non-zero safe integer (positive for sales, negative for returns/deductions) |
+| `subtotal` | `INTEGER NOT NULL` | `unit_price * quantity`, before discount (signed safe integer) |
 | `discount_basis_points` | `INTEGER NOT NULL DEFAULT 0` (migration `0004`) | integer `0..10000`; one basis point = 0.01% |
 | `created_at` | `TEXT NOT NULL` | immutable UTC timestamp |
 
@@ -660,8 +660,8 @@ Required constraints and indexes:
 - Snapshot names are trimmed and non-empty. Nullable SKU/brand snapshots are
   trimmed and non-empty when present.
 - `CHECK (unit_price BETWEEN 0 AND 9007199254740991)`,
-  `CHECK (quantity BETWEEN 1 AND 9007199254740991)`,
-  `CHECK (subtotal BETWEEN 0 AND 9007199254740991)`, and
+  `CHECK ((quantity BETWEEN -9007199254740991 AND -1) OR (quantity BETWEEN 1 AND 9007199254740991))` (widened in migration `0005`),
+  `CHECK (subtotal BETWEEN -9007199254740991 AND 9007199254740991)` (widened in migration `0005`), and
   `CHECK (subtotal = unit_price * quantity)`.
 - Indexes support lookup by `invoice_id`, `product_id`, and `unit_id`.
 - Invoice history renders snapshot fields and never reads mutable catalog
@@ -684,6 +684,17 @@ Required constraints and indexes:
   and creation timestamp, capture the selected catalog product and its owned unit
   as transaction snapshots, and use the selected unit price. Manual line-price
   overrides and CK never modify catalog prices.
+
+### Return / deduction lines (approved September 12, 2026)
+
+- Customer returns and credit deductions are represented as lines with negative integer `quantity` (e.g. `-10`).
+- `unit_price` remains non-negative (reflecting the agreed return price per unit).
+- `subtotal = unit_price * quantity` produces a negative gross amount.
+- Line discounts apply symmetrically with half-away-from-zero rounding:
+  `raw = subtotal * discount_basis_points`, `discountAmount = (raw >= 0 ? raw + 5000 : raw - 5000) / 10000`.
+- Net invoice `total` sums all line payments and can be negative (credit balance).
+- Presentation format: In Vietnamese trade accounting, negative amounts are rendered enclosed in parentheses (e.g., `(37.000 ₫)` or `(3.700 ₫)`).
+- Migration `0005_allow_negative_quantity.sql` rebuilds `invoices` and `invoice_items` to widen CHECK constraints while preserving existing data, indexes, foreign keys, and integrity triggers.
 
 ### 19.7 Transaction Boundaries
 

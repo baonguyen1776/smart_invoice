@@ -197,6 +197,12 @@ describe("Invoice use cases", () => {
     const preferredResult = await restoreUseCase.execute({ preferredInvoiceId: INVOICE_ID });
     expect(preferredResult.ok && preferredResult.value.id).toBe(INVOICE_ID);
 
+    // Preferred ID failing or invalid: gracefully falls back to available drafts
+    const fallbackResult = await restoreUseCase.execute({
+      preferredInvoiceId: "00000000-0000-4000-8000-000000000000",
+    });
+    expect(fallbackResult.ok && fallbackResult.value.id).toBe(draft2Id);
+
     // Preferred ID missing: restores newest draft (draft2 was updated at 02:05)
     const latestResult = await restoreUseCase.execute();
     expect(latestResult.ok && latestResult.value.id).toBe(draft2Id);

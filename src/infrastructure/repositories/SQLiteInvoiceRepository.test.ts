@@ -143,6 +143,40 @@ describe("SQLiteInvoiceRepository", () => {
     });
     expect(JSON.stringify(result)).not.toContain("SQLITE_LOCKED");
   });
+
+  it("skips corrupted records in listInvoices so valid invoices remain available", async () => {
+    const validDraft = makeDraft();
+    const commandInvoker = vi.fn<CommandInvoker>().mockResolvedValue([
+      {
+        id: validDraft.id,
+        invoiceNumber: validDraft.invoiceNumber,
+        status: "draft",
+        total: 0,
+        createdAt: NOW,
+        updatedAt: NOW,
+        completedAt: null,
+        items: [],
+      },
+      {
+        id: "invalid-uuid",
+        invoiceNumber: 99,
+        status: "draft",
+        total: 0,
+        createdAt: NOW,
+        updatedAt: NOW,
+        completedAt: null,
+        items: [],
+      },
+    ]);
+    const repository = new SQLiteInvoiceRepository(commandInvoker);
+
+    const result = await repository.listInvoices("draft");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
+    expect(result.value[0].id).toBe(validDraft.id);
+  });
 });
 
 it("round-trips persisted discount basis points and net totals through the command DTO", async () => {
@@ -152,7 +186,10 @@ it("round-trips persisted discount basis points and net totals through the comma
   const repository = new SQLiteInvoiceRepository(invoker);
   expect((await repository.saveDraft(invoice)).ok).toBe(true);
   const record = invoker.mock.calls[0][1]?.invoice;
-  expect(record).toMatchObject({ total: 17500, items: [expect.objectContaining({ subtotal: 20000, discountBasisPoints: 1250 })] });
+  expect(record).toMatchObject({
+    total: 17500,
+    items: [expect.objectContaining({ subtotal: 20000, discountBasisPoints: 1250 })],
+  });
   invoker.mockResolvedValue(record);
   const restored = await repository.findById(INVOICE_ID);
   expect(restored.ok && restored.value?.items[0].discountAmount).toBe(2500);
