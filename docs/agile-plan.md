@@ -126,6 +126,7 @@ where business logic lives, how DB migrations work, and what agents must not tou
 - [x] UX-004 Total amount calculation
 - [x] UX-005 Draft auto-save on semantic events (add item / edit quantity / edit price / remove item) — debounced, not on every keystroke
 - [x] UX-008 Allow negative-quantity return/deduction lines in invoices (Issue #28)
+- [ ] UX-009 UI Refactoring & Design System: standardize buttons, colors, and polish overall interface (Issue #35)
 - [ ] UX-006 Complete Invoice (status draft → completed)
 - [ ] UX-007 Edit a completed invoice: confirmation dialog, then overwrite on save (confirmed decision — kept in MVP)
 
