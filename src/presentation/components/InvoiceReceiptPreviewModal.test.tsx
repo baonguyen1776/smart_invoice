@@ -152,6 +152,12 @@ describe("InvoiceReceiptPreviewModal", () => {
 
     // Total row
     expect(screen.getByText("Tổng Cộng")).toBeDefined();
+
+    // Proportional colgroup with 9 columns
+    const colgroup = document.querySelector(".thu-ba-table colgroup");
+    expect(colgroup).not.toBeNull();
+    const cols = colgroup?.querySelectorAll("col");
+    expect(cols?.length).toBe(9);
   });
 
   it("allows changing display row count dynamically via toolbar select", () => {
