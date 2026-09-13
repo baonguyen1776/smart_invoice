@@ -11,6 +11,7 @@ import { CreateProduct } from "./application/use-cases/CreateProduct";
 import { DeactivateProduct } from "./application/use-cases/DeactivateProduct";
 import { ListProducts } from "./application/use-cases/ListProducts";
 import { LoadProductSearchIndex } from "./application/use-cases/LoadProductSearchIndex";
+import { MarkInvoicePrinted } from "./application/use-cases/MarkInvoicePrinted";
 import { ReactivateProduct } from "./application/use-cases/ReactivateProduct";
 import { SearchProducts } from "./application/use-cases/SearchProducts";
 import { UpdateProduct } from "./application/use-cases/UpdateProduct";
@@ -61,6 +62,7 @@ const invoiceActions = {
   deleteInvoiceDraft: new DeleteInvoiceDraft(invoiceRepository),
   completeInvoice: new CompleteInvoice(invoiceRepository, clock),
   overwriteCompletedInvoice: new OverwriteCompletedInvoice(invoiceRepository, clock),
+  markInvoicePrinted: new MarkInvoicePrinted(invoiceRepository),
 };
 
 createRoot(rootElement).render(

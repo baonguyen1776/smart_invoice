@@ -5,18 +5,33 @@ import type { InvoiceRepository } from "../repositories/InvoiceRepository";
 import { err, ok, type Result } from "../shared/Result";
 import { loadInvoice, mapInvoiceDomainError } from "./InvoiceUseCaseSupport";
 
+export interface CompleteInvoiceInput {
+  readonly invoiceId: string;
+  readonly customer?: {
+    readonly name?: string | null;
+    readonly phone?: string | null;
+    readonly address?: string | null;
+    readonly note?: string | null;
+  };
+}
+
 export class CompleteInvoice {
   constructor(
     private readonly repository: InvoiceRepository,
     private readonly clock: Clock,
   ) {}
 
-  async execute(input: { readonly invoiceId: string }): Promise<Result<Invoice, InvoiceError>> {
+  async execute(input: CompleteInvoiceInput): Promise<Result<Invoice, InvoiceError>> {
     const loaded = await loadInvoice(this.repository, input.invoiceId);
     if (!loaded.ok) return loaded;
 
     try {
-      const invoice = loaded.value.complete(this.clock.now());
+      const now = this.clock.now();
+      let invoice = loaded.value;
+      if (input.customer) {
+        invoice = invoice.withCustomer(input.customer, now);
+      }
+      invoice = invoice.complete(now);
       const persisted = await this.repository.complete(invoice);
       return persisted.ok ? ok(invoice) : persisted;
     } catch (error) {

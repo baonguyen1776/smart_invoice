@@ -35,6 +35,12 @@ interface InvoiceRecord {
   readonly invoiceNumber: number;
   readonly status: InvoiceStatus;
   readonly total: number;
+  readonly customerName?: string | null;
+  readonly customerPhone?: string | null;
+  readonly customerAddress?: string | null;
+  readonly customerNote?: string | null;
+  readonly isPrinted?: boolean;
+  readonly printedAt?: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly completedAt: string | null;
@@ -119,6 +125,22 @@ export class SQLiteInvoiceRepository implements InvoiceRepository {
     }
   }
 
+  // 7. Đánh dấu đã in hóa đơn
+  async markPrinted(
+    invoiceId: string,
+    printedAt: string,
+  ): Promise<Result<void, InvoicePersistenceFailure>> {
+    try {
+      await this.commandInvoker("mark_invoice_printed", {
+        invoiceId,
+        printedAt,
+      });
+      return ok(undefined);
+    } catch {
+      return err(mapPersistenceFailure("mark_printed"));
+    }
+  }
+
   private async write(
     command: "save_invoice_draft" | "complete_invoice" | "overwrite_completed_invoice",
     operation: "save_draft" | "complete" | "overwrite_completed",
@@ -140,6 +162,12 @@ function toRecord(invoice: Invoice): InvoiceRecord {
     invoiceNumber: state.invoiceNumber,
     status: state.status,
     total: state.total,
+    customerName: state.customerName,
+    customerPhone: state.customerPhone,
+    customerAddress: state.customerAddress,
+    customerNote: state.customerNote,
+    isPrinted: state.isPrinted,
+    printedAt: state.printedAt,
     createdAt: state.createdAt,
     updatedAt: state.updatedAt,
     completedAt: state.completedAt,
@@ -168,6 +196,12 @@ function toRecord(invoice: Invoice): InvoiceRecord {
 function rehydrateInvoice(record: InvoiceRecord): Invoice {
   return Invoice.rehydrate({
     ...record,
+    customerName: record.customerName ?? null,
+    customerPhone: record.customerPhone ?? null,
+    customerAddress: record.customerAddress ?? null,
+    customerNote: record.customerNote ?? null,
+    isPrinted: Boolean(record.isPrinted),
+    printedAt: record.printedAt ?? null,
     items: record.items.map((item) =>
       InvoiceItem.rehydrate({
         id: item.id,

@@ -1293,3 +1293,75 @@ fn line_item_notes_persist_and_reject_whitespace_only() {
         assert!(err.is_err());
     });
 }
+
+#[test]
+fn customer_metadata_and_print_tracking_persist_and_update() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+        let mut invoice = insert_invoice_draft(
+            &pool,
+            CreateInvoiceDraftInput {
+                id: INVOICE_ID.into(),
+                created_at: NOW.into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(invoice.customer_name, None);
+        assert_eq!(invoice.customer_phone, None);
+        assert_eq!(invoice.customer_address, None);
+        assert_eq!(invoice.customer_note, None);
+        assert!(!invoice.is_printed);
+        assert_eq!(invoice.printed_at, None);
+
+        // Update customer metadata
+        invoice.customer_name = Some("Anh Tuấn".to_string());
+        invoice.customer_phone = Some("0905123456".to_string());
+        invoice.customer_address = Some("Đà Nẵng".to_string());
+        invoice.customer_note = Some("Giao hàng sáng".to_string());
+        invoice.items.push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        invoice.total = 20_000;
+        persist_draft_items_and_total(&pool, invoice.clone()).await.unwrap();
+
+        let fetched = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(fetched.customer_name.as_deref(), Some("Anh Tuấn"));
+        assert_eq!(fetched.customer_phone.as_deref(), Some("0905123456"));
+        assert_eq!(fetched.customer_address.as_deref(), Some("Đà Nẵng"));
+        assert_eq!(fetched.customer_note.as_deref(), Some("Giao hàng sáng"));
+        assert!(!fetched.is_printed);
+        assert_eq!(fetched.printed_at, None);
+
+        // Mark invoice as printed
+        persist_mark_invoice_printed(&pool, INVOICE_ID, NOW).await.unwrap();
+        let fetched_printed = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert!(fetched_printed.is_printed);
+        assert_eq!(fetched_printed.printed_at.as_deref(), Some(NOW));
+
+        // Complete invoice preserves customer info and print tracking
+        let mut complete_req = fetched_printed.clone();
+        complete_req.status = "completed".to_string();
+        complete_req.completed_at = Some(NOW.to_string());
+        persist_completed_invoice(&pool, complete_req).await.unwrap();
+
+        let fetched_completed = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(fetched_completed.status, "completed");
+        assert_eq!(fetched_completed.customer_name.as_deref(), Some("Anh Tuấn"));
+        assert_eq!(fetched_completed.customer_phone.as_deref(), Some("0905123456"));
+        assert!(fetched_completed.is_printed);
+
+        // list_invoices returns the metadata
+        let list = fetch_invoices(&pool, Some("completed")).await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].customer_name.as_deref(), Some("Anh Tuấn"));
+        assert!(list[0].is_printed);
+
+        // Whitespace-only customer_name violates CHECK constraint
+        let mut invalid_draft = fetched;
+        invalid_draft.customer_name = Some("   ".to_string());
+        let err = persist_draft_items_and_total(&pool, invalid_draft).await;
+        assert!(err.is_err());
+    });
+}
+

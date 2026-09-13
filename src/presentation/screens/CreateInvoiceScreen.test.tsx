@@ -684,7 +684,9 @@ describe("Complete and overwrite completed invoices (#19)", () => {
     fireEvent.click(completeButton);
 
     await waitFor(() => {
-      expect(completeSpy).toHaveBeenCalledWith({ invoiceId: draft.id });
+      expect(completeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ invoiceId: draft.id }),
+      );
     });
 
     expect(screen.getByText("ĐÃ HOÀN TẤT")).toBeVisible();
@@ -715,31 +717,38 @@ describe("Complete and overwrite completed invoices (#19)", () => {
     await screen.findByText("Hóa đơn đã được chốt trước đó.");
   });
 
-  it("displays completed invoices tab in the modal and allows selecting a completed invoice", async () => {
-    const product = makeSingleUnitProduct();
-    const draft = makeDraftInvoice([makeInvoiceItem(ITEM_ID_1, product, product.units[0])]);
-    const completedId = "22222222-2222-4222-8222-222222222229";
+  it("only displays drafts in the drafts modal and opens completed invoices via editingInvoice", async () => {
+    const draft = makeDraftInvoice([]);
     const completed = Invoice.rehydrate({
-      id: completedId,
+      id: "99999999-9999-4999-8999-999999999999",
       invoiceNumber: 99,
       status: "completed",
       total: 58000,
-      createdAt: NOW,
-      updatedAt: NOW,
-      completedAt: NOW,
+      customerName: "Khách VIP",
+      customerPhone: "0912345678",
+      customerAddress: null,
+      customerNote: null,
+      isPrinted: false,
+      printedAt: null,
+      createdAt: "2026-09-01T10:00:00.000Z",
+      updatedAt: "2026-09-01T10:05:00.000Z",
+      completedAt: "2026-09-01T10:05:00.000Z",
       items: [
-        InvoiceItem.create({
-          id: "77777777-7777-4777-8777-777777777779",
-          invoiceId: completedId,
-          productId: product.id,
-          unitId: product.units[0].id,
-          productName: product.name,
-          productSku: product.sku ?? null,
-          productBrand: product.brand ?? null,
-          unitName: product.units[0].name,
+        InvoiceItem.rehydrate({
+          id: "88888888-8888-4888-8888-888888888888",
+          invoiceId: "99999999-9999-4999-8999-999999999999",
+          productId: "77777777-7777-4777-8777-777777777777",
+          unitId: "66666666-6666-4666-8666-666666666666",
+          productName: "Cát xây tô",
+          productSku: null,
+          productBrand: null,
+          unitName: "Khối",
           unitPrice: 29000,
           quantity: 2,
-          createdAt: NOW,
+          subtotal: 58000,
+          discountBasisPoints: 0,
+          note: null,
+          createdAt: "2026-09-01T10:00:00.000Z",
         }),
       ],
     });
@@ -748,32 +757,29 @@ describe("Complete and overwrite completed invoices (#19)", () => {
     const actions: InvoiceScreenActions = {
       ...baseActions,
       listInvoices: {
-        execute: vi.fn(async ({ status }) =>
-          status === "completed" ? ok([completed]) : ok([draft]),
-        ),
+        execute: vi.fn(async () => ok([draft])),
       },
     };
 
-    render(<CreateInvoiceScreen actions={actions} />);
+    const { rerender } = render(<CreateInvoiceScreen actions={actions} />);
     await screen.findByText("#000001");
 
     // Open modal
     fireEvent.click(screen.getByRole("button", { name: /Bản nháp/ }));
-    expect(screen.getByRole("dialog", { name: "Bản nháp đã lưu" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: /Bản nháp đã lưu/ })).toBeVisible();
 
-    // Click Completed tab
-    const completedTab = screen.getByRole("tab", { name: /Đã hoàn thành/ });
-    fireEvent.click(completedTab);
+    // Verify there is NO "Đã hoàn thành" tab in the modal
+    expect(screen.queryByRole("tab", { name: /Đã hoàn thành/ })).toBeNull();
+    expect(screen.queryByText("Đã chốt")).toBeNull();
 
-    expect(screen.getByText("#000099")).toBeVisible();
-    expect(screen.getByText("Đã chốt")).toBeVisible();
+    // Close modal and pass editingInvoice (simulating opening from history)
+    fireEvent.click(screen.getByRole("button", { name: "Đóng danh sách hóa đơn" }));
 
-    // Click view completed
-    fireEvent.click(screen.getByRole("button", { name: "Xem / Sửa" }));
-
+    rerender(<CreateInvoiceScreen actions={actions} editingInvoice={completed} />);
     await screen.findByText("#000099");
     expect(screen.getByRole("heading", { level: 1, name: "Chi tiết hóa đơn" })).toBeVisible();
     expect(screen.getByText("ĐÃ HOÀN TẤT")).toBeVisible();
+    expect(screen.getByDisplayValue("Khách VIP")).toBeVisible();
   });
 
   it("stages changes in memory when editing a completed invoice without calling repository", async () => {

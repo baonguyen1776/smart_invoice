@@ -8,6 +8,7 @@ import type { CompleteInvoice } from "../../application/use-cases/CompleteInvoic
 import type { CreateInvoiceDraft } from "../../application/use-cases/CreateInvoiceDraft";
 import type { DeleteInvoiceDraft } from "../../application/use-cases/DeleteInvoiceDraft";
 import type { ListInvoices } from "../../application/use-cases/ListInvoices";
+import type { MarkInvoicePrinted } from "../../application/use-cases/MarkInvoicePrinted";
 import type { OverwriteCompletedInvoice } from "../../application/use-cases/OverwriteCompletedInvoice";
 import type { RestoreInvoiceDraft } from "../../application/use-cases/RestoreInvoiceDraft";
 import type { SearchProducts } from "../../application/use-cases/SearchProducts";
@@ -27,6 +28,7 @@ export interface InvoiceScreenActions {
   readonly deleteInvoiceDraft?: Pick<DeleteInvoiceDraft, "execute">;
   readonly completeInvoice?: Pick<CompleteInvoice, "execute">;
   readonly overwriteCompletedInvoice?: Pick<OverwriteCompletedInvoice, "execute">;
+  readonly markInvoicePrinted?: Pick<MarkInvoicePrinted, "execute">;
 }
 
 function applyItemChangeInMemory(
@@ -75,9 +77,10 @@ function applyItemChangeInMemory(
 export interface CreateInvoiceScreenProps {
   readonly actions: InvoiceScreenActions;
   readonly onNavigateToProducts?: (prefillQuery?: string) => void;
-  readonly onNavigate?: (screen: "invoice" | "products") => void;
-  readonly activeScreen?: "invoice" | "products";
+  readonly onNavigate?: (screen: "invoice" | "products" | "history") => void;
+  readonly activeScreen?: "invoice" | "products" | "history";
   readonly onCompleteInvoice?: (invoice: Invoice) => void;
+  readonly editingInvoice?: Invoice | null;
 }
 
 export function CreateInvoiceScreen({
@@ -86,6 +89,7 @@ export function CreateInvoiceScreen({
   onNavigate,
   activeScreen = "invoice",
   onCompleteInvoice,
+  editingInvoice,
 }: CreateInvoiceScreenProps) {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -97,8 +101,6 @@ export function CreateInvoiceScreen({
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [drafts, setDrafts] = useState<readonly Invoice[]>([]);
-  const [completedInvoices, setCompletedInvoices] = useState<readonly Invoice[]>([]);
-  const [invoicesTab, setInvoicesTab] = useState<"drafts" | "completed">("drafts");
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [originalCompletedInvoice, setOriginalCompletedInvoice] = useState<Invoice | null>(null);
@@ -119,24 +121,50 @@ export function CreateInvoiceScreen({
     promise: ReturnType<InvoiceScreenActions["createInvoiceDraft"]["execute"]>;
   } | null>(null);
 
-  const loadCustomerForInvoice = useCallback((invoiceId: string) => {
-    try {
-      localStorage.setItem("smart_invoice_active_draft_id", invoiceId);
-      const saved = localStorage.getItem(`smart_invoice_customer_${invoiceId}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setCustomerName(parsed.name || "");
-        setCustomerPhone(parsed.phone || "");
-        setCustomerNote(parsed.note || "");
-        return;
+  const loadCustomerForInvoice = useCallback(
+    (invoiceId: string, invoiceEntity?: Invoice | null) => {
+      try {
+        localStorage.setItem("smart_invoice_active_draft_id", invoiceId);
+        if (
+          invoiceEntity &&
+          (invoiceEntity.customerName ||
+            invoiceEntity.customerPhone ||
+            invoiceEntity.customerNote)
+        ) {
+          setCustomerName(invoiceEntity.customerName || "");
+          setCustomerPhone(invoiceEntity.customerPhone || "");
+          setCustomerNote(invoiceEntity.customerNote || "");
+          return;
+        }
+        const saved = localStorage.getItem(`smart_invoice_customer_${invoiceId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setCustomerName(parsed.name || "");
+          setCustomerPhone(parsed.phone || "");
+          setCustomerNote(parsed.note || "");
+          return;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
+      setCustomerName("");
+      setCustomerPhone("");
+      setCustomerNote("");
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (editingInvoice) {
+      setInvoice(editingInvoice);
+      if (editingInvoice.status === "completed") {
+        setOriginalCompletedInvoice(editingInvoice);
+      } else {
+        setOriginalCompletedInvoice(null);
+      }
+      loadCustomerForInvoice(editingInvoice.id, editingInvoice);
     }
-    setCustomerName("");
-    setCustomerPhone("");
-    setCustomerNote("");
-  }, []);
+  }, [editingInvoice, loadCustomerForInvoice]);
 
   const refreshInvoices = useCallback(async () => {
     if (!actions.listInvoices) return;
@@ -144,10 +172,6 @@ export function CreateInvoiceScreen({
       const draftsResult = await actions.listInvoices.execute({ status: "draft" });
       if (draftsResult.ok) {
         setDrafts(draftsResult.value);
-      }
-      const completedResult = await actions.listInvoices.execute({ status: "completed" });
-      if (completedResult.ok) {
-        setCompletedInvoices(completedResult.value);
       }
     } catch {
       // ignore
@@ -232,7 +256,18 @@ export function CreateInvoiceScreen({
     else if (field === "phone") setCustomerPhone(value);
     else if (field === "note") setCustomerNote(value);
 
-    if (invoice?.id) {
+    if (invoice) {
+      try {
+        const updated = invoice.withCustomer({
+          name: nextName,
+          phone: nextPhone,
+          note: nextNote,
+        });
+        setInvoice(updated);
+      } catch {
+        // ignore
+      }
+
       try {
         const data = {
           name: nextName,
@@ -267,7 +302,7 @@ export function CreateInvoiceScreen({
       setHasStagedChanges(false);
       setNoticeMessage(`Đã mở bản nháp #${String(selected.invoiceNumber).padStart(6, "0")}`);
     }
-    loadCustomerForInvoice(selected.id);
+    loadCustomerForInvoice(selected.id, selected);
     setIsDraftsModalOpen(false);
   }
 
@@ -316,7 +351,7 @@ export function CreateInvoiceScreen({
         setInvoice(remaining[0]);
         setOriginalCompletedInvoice(null);
         setHasStagedChanges(false);
-        loadCustomerForInvoice(remaining[0].id);
+        loadCustomerForInvoice(remaining[0].id, remaining[0]);
         setNoticeMessage(`Đã xóa bản nháp #${String(target.invoiceNumber).padStart(6, "0")}`);
       } else {
         void handleCreateNewDraft();
@@ -340,7 +375,14 @@ export function CreateInvoiceScreen({
     setErrorMessage(null);
     try {
       if (actions.completeInvoice) {
-        const result = await actions.completeInvoice.execute({ invoiceId: invoice.id });
+        const result = await actions.completeInvoice.execute({
+          invoiceId: invoice.id,
+          customer: {
+            name: customerName,
+            phone: customerPhone,
+            note: customerNote,
+          },
+        });
         if (result.ok) {
           setInvoice(result.value);
           setOriginalCompletedInvoice(result.value);
@@ -388,6 +430,11 @@ export function CreateInvoiceScreen({
         invoiceId: invoice.id,
         confirmed: true,
         items: invoice.items,
+        customer: {
+          name: customerName,
+          phone: customerPhone,
+          note: customerNote,
+        },
       });
       if (result.ok) {
         setInvoice(result.value);
@@ -443,6 +490,11 @@ export function CreateInvoiceScreen({
           const result = await actions.applyInvoiceItemChange.execute({
             invoiceId: invoice.id,
             change,
+            customer: {
+              name: customerName,
+              phone: customerPhone,
+              note: customerNote,
+            },
           });
           if (result.ok) {
             setInvoice(result.value);
@@ -466,7 +518,7 @@ export function CreateInvoiceScreen({
       changeQueue.current = operation;
       return operation;
     },
-    [actions.applyInvoiceItemChange, invoice],
+    [actions.applyInvoiceItemChange, invoice, customerName, customerPhone, customerNote],
   );
 
   async function handleRemoveItem(itemId: string) {
@@ -808,30 +860,9 @@ export function CreateInvoiceScreen({
                 <div className="drafts-modal-title-wrap">
                   <InvoiceIcon name="receipt" size={18} />
                   <h2 id="drafts-modal-title">Bản nháp đã lưu</h2>
-                </div>
-                <div className="invoices-modal-tabs" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    id="tab-drafts"
-                    aria-selected={invoicesTab === "drafts"}
-                    aria-controls="panel-drafts"
-                    className={`invoices-modal-tab ${invoicesTab === "drafts" ? "is-active" : ""}`}
-                    onClick={() => setInvoicesTab("drafts")}
-                  >
-                    Bản nháp ({drafts.length})
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    id="tab-completed"
-                    aria-selected={invoicesTab === "completed"}
-                    aria-controls="panel-completed"
-                    className={`invoices-modal-tab ${invoicesTab === "completed" ? "is-active" : ""}`}
-                    onClick={() => setInvoicesTab("completed")}
-                  >
-                    Đã hoàn thành ({completedInvoices.length})
-                  </button>
+                  {drafts.length > 0 && (
+                    <span className="drafts-modal-badge">{drafts.length}</span>
+                  )}
                 </div>
                 <div className="drafts-modal-actions">
                   <button
@@ -854,110 +885,30 @@ export function CreateInvoiceScreen({
               </div>
 
               <div className="invoice-drafts-modal-body">
-                {invoicesTab === "drafts" ? (
-                  drafts.length === 0 ? (
-                    <div className="drafts-empty-state">
-                      <InvoiceIcon name="receipt" size={32} />
-                      <p>Chưa có bản nháp nào được lưu.</p>
-                    </div>
-                  ) : (
-                    <ul className="drafts-list" role="list" id="panel-drafts">
-                      {drafts.map((d) => {
-                        const isCurrent = d.id === invoice?.id;
-                        const customerData = getSavedCustomer(d.id);
-                        return (
-                          <li
-                            key={d.id}
-                            className={`draft-item-card ${isCurrent ? "is-active-draft" : ""}`}
-                            onClick={() => handleSelectInvoice(d)}
-                          >
-                            <div className="draft-card-main">
-                              <div className="draft-card-heading">
-                                <span className="draft-card-number">
-                                  #{String(d.invoiceNumber).padStart(6, "0")}
-                                </span>
-                                {isCurrent && <span className="draft-current-tag">Đang mở</span>}
-                                <span className="draft-time">
-                                  {formatRelativeTime(d.updatedAt)}
-                                </span>
-                              </div>
-                              <div className="draft-card-details">
-                                <span className="draft-customer-name">
-                                  <InvoiceIcon name="user" size={12} />
-                                  {customerData?.name || "Khách lẻ"}
-                                </span>
-                                <span className="draft-items-count">
-                                  <InvoiceIcon name="box" size={12} />
-                                  {d.items.length} mặt hàng
-                                </span>
-                              </div>
-                            </div>
-                            <div className="draft-card-aside">
-                              <strong className="draft-card-total">
-                                {d.total.toLocaleString("vi-VN")} ₫
-                              </strong>
-                              <div className="draft-card-buttons">
-                                <button
-                                  type="button"
-                                  className={
-                                    isCurrent
-                                      ? "secondary-button btn-open-draft"
-                                      : "primary-button btn-open-draft"
-                                  }
-                                  disabled={isCurrent}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSelectInvoice(d);
-                                  }}
-                                >
-                                  {isCurrent ? "Đang sửa" : "Mở bản nháp"}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn-delete-draft"
-                                  title="Xóa bản nháp này"
-                                  aria-label={`Xóa bản nháp #${String(d.invoiceNumber).padStart(6, "0")}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleDeleteDraft(d);
-                                  }}
-                                >
-                                  <InvoiceIcon name="trash" size={13} />
-                                </button>
-                              </div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )
-                ) : completedInvoices.length === 0 ? (
+                {drafts.length === 0 ? (
                   <div className="drafts-empty-state">
                     <InvoiceIcon name="receipt" size={32} />
-                    <p>Chưa có hóa đơn nào hoàn thành.</p>
+                    <p>Chưa có bản nháp nào được lưu.</p>
                   </div>
                 ) : (
-                  <ul className="drafts-list" role="list" id="panel-completed">
-                    {completedInvoices.map((c) => {
-                      const isCurrent = c.id === invoice?.id;
-                      const customerData = getSavedCustomer(c.id);
+                  <ul className="drafts-list" role="list" id="panel-drafts">
+                    {drafts.map((d) => {
+                      const isCurrent = d.id === invoice?.id;
+                      const customerData = getSavedCustomer(d.id, d);
                       return (
                         <li
-                          key={c.id}
+                          key={d.id}
                           className={`draft-item-card ${isCurrent ? "is-active-draft" : ""}`}
-                          onClick={() => handleSelectInvoice(c)}
+                          onClick={() => handleSelectInvoice(d)}
                         >
                           <div className="draft-card-main">
                             <div className="draft-card-heading">
                               <span className="draft-card-number">
-                                #{String(c.invoiceNumber).padStart(6, "0")}
+                                #{String(d.invoiceNumber).padStart(6, "0")}
                               </span>
-                              <span className="draft-completed-tag">Đã chốt</span>
                               {isCurrent && <span className="draft-current-tag">Đang mở</span>}
                               <span className="draft-time">
-                                {c.completedAt
-                                  ? formatRelativeTime(c.completedAt)
-                                  : formatRelativeTime(c.updatedAt)}
+                                {formatRelativeTime(d.updatedAt)}
                               </span>
                             </div>
                             <div className="draft-card-details">
@@ -967,13 +918,13 @@ export function CreateInvoiceScreen({
                               </span>
                               <span className="draft-items-count">
                                 <InvoiceIcon name="box" size={12} />
-                                {c.items.length} mặt hàng
+                                {d.items.length} mặt hàng
                               </span>
                             </div>
                           </div>
                           <div className="draft-card-aside">
                             <strong className="draft-card-total">
-                              {c.total.toLocaleString("vi-VN")} ₫
+                              {d.total.toLocaleString("vi-VN")} ₫
                             </strong>
                             <div className="draft-card-buttons">
                               <button
@@ -986,10 +937,22 @@ export function CreateInvoiceScreen({
                                 disabled={isCurrent}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleSelectInvoice(c);
+                                  handleSelectInvoice(d);
                                 }}
                               >
-                                {isCurrent ? "Đang xem" : "Xem / Sửa"}
+                                {isCurrent ? "Đang sửa" : "Mở bản nháp"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-delete-draft"
+                                title="Xóa bản nháp này"
+                                aria-label={`Xóa bản nháp #${String(d.invoiceNumber).padStart(6, "0")}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleDeleteDraft(d);
+                                }}
+                              >
+                                <InvoiceIcon name="trash" size={13} />
                               </button>
                             </div>
                           </div>
@@ -1059,6 +1022,7 @@ export function CreateInvoiceScreen({
           }}
           isOpen={isReceiptModalOpen}
           onClose={() => setIsReceiptModalOpen(false)}
+          onPrint={() => void handlePrintReceipt()}
           onNewDraft={() => {
             setIsReceiptModalOpen(false);
             void handleCreateNewDraft();
@@ -1067,11 +1031,34 @@ export function CreateInvoiceScreen({
       </main>
     </div>
   );
+
+  async function handlePrintReceipt() {
+    if (invoice && actions.markInvoicePrinted && !invoice.isPrinted) {
+      try {
+        const result = await actions.markInvoicePrinted.execute({ invoiceId: invoice.id });
+        if (result.ok) {
+          setInvoice((prev) => (prev ? prev.markPrinted() : null));
+          void refreshInvoices();
+        }
+      } catch {
+        // ignore
+      }
+    }
+    window.print();
+  }
 }
 
 function getSavedCustomer(
   invoiceId: string,
+  inv?: Invoice | null,
 ): { name?: string; phone?: string; note?: string } | null {
+  if (inv && (inv.customerName || inv.customerPhone || inv.customerNote)) {
+    return {
+      name: inv.customerName ?? undefined,
+      phone: inv.customerPhone ?? undefined,
+      note: inv.customerNote ?? undefined,
+    };
+  }
   try {
     const raw = localStorage.getItem(`smart_invoice_customer_${invoiceId}`);
     return raw ? JSON.parse(raw) : null;

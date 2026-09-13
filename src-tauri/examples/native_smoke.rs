@@ -43,6 +43,7 @@ fn main() {
             database::overwrite_completed_invoice,
             database::list_invoices,
             database::delete_invoice_draft,
+            database::mark_invoice_printed,
             smoke_report,
         ])
         .setup(move |app| {

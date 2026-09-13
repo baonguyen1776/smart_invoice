@@ -79,6 +79,19 @@ export class InMemoryInvoiceRepository implements InvoiceRepository {
     return ok(undefined);
   }
 
+  async markPrinted(
+    invoiceId: string,
+    printedAt: string,
+  ): Promise<Result<void, InvoicePersistenceFailure>> {
+    const failure = this.takeFailure("mark_printed");
+    if (failure !== null) return err(failure);
+    const existing = this.invoices.get(invoiceId);
+    if (existing) {
+      this.invoices.set(invoiceId, existing.markPrinted(printedAt));
+    }
+    return ok(undefined);
+  }
+
   private persist(
     operation: InvoiceRepositoryOperation,
     invoice: Invoice,

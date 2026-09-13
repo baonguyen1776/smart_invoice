@@ -10,6 +10,12 @@ export interface InvoiceState {
   readonly invoiceNumber: number;
   readonly status: InvoiceStatus;
   readonly total: number;
+  readonly customerName?: string | null;
+  readonly customerPhone?: string | null;
+  readonly customerAddress?: string | null;
+  readonly customerNote?: string | null;
+  readonly isPrinted?: boolean;
+  readonly printedAt?: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly completedAt: string | null;
@@ -20,6 +26,10 @@ export interface CreateInvoiceDraftInput {
   readonly id: string;
   readonly invoiceNumber: number;
   readonly createdAt: string;
+  readonly customerName?: string | null;
+  readonly customerPhone?: string | null;
+  readonly customerAddress?: string | null;
+  readonly customerNote?: string | null;
 }
 
 export class InvoiceValidationError extends Error {
@@ -34,6 +44,12 @@ export class Invoice {
   readonly invoiceNumber: number;
   readonly status: InvoiceStatus;
   readonly total: number;
+  readonly customerName: string | null;
+  readonly customerPhone: string | null;
+  readonly customerAddress: string | null;
+  readonly customerNote: string | null;
+  readonly isPrinted: boolean;
+  readonly printedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly completedAt: string | null;
@@ -44,6 +60,12 @@ export class Invoice {
     this.invoiceNumber = state.invoiceNumber;
     this.status = state.status;
     this.total = state.total;
+    this.customerName = state.customerName ?? null;
+    this.customerPhone = state.customerPhone ?? null;
+    this.customerAddress = state.customerAddress ?? null;
+    this.customerNote = state.customerNote ?? null;
+    this.isPrinted = Boolean(state.isPrinted);
+    this.printedAt = state.printedAt ?? null;
     this.createdAt = state.createdAt;
     this.updatedAt = state.updatedAt;
     this.completedAt = state.completedAt;
@@ -55,6 +77,12 @@ export class Invoice {
       ...input,
       status: "draft",
       total: 0,
+      customerName: input.customerName ?? null,
+      customerPhone: input.customerPhone ?? null,
+      customerAddress: input.customerAddress ?? null,
+      customerNote: input.customerNote ?? null,
+      isPrinted: false,
+      printedAt: null,
       updatedAt: input.createdAt,
       completedAt: null,
       items: [],
@@ -71,6 +99,35 @@ export class Invoice {
     }
 
     return Invoice.fromState({ ...this.toState(), items, updatedAt, total: calculateTotal(items) });
+  }
+
+  withCustomer(
+    customer: {
+      name?: string | null;
+      phone?: string | null;
+      address?: string | null;
+      note?: string | null;
+    },
+    updatedAt: string = new Date().toISOString(),
+  ): Invoice {
+    return Invoice.fromState({
+      ...this.toState(),
+      customerName: customer.name ?? null,
+      customerPhone: customer.phone ?? null,
+      customerAddress: customer.address ?? null,
+      customerNote: customer.note ?? null,
+      updatedAt,
+    });
+  }
+
+  markPrinted(printedAt: string = new Date().toISOString()): Invoice {
+    validateTimestamp(printedAt, "printedAt");
+    return Invoice.fromState({
+      ...this.toState(),
+      isPrinted: true,
+      printedAt,
+      updatedAt: printedAt,
+    });
   }
 
   complete(completedAt: string): Invoice {
@@ -113,6 +170,12 @@ export class Invoice {
       invoiceNumber: this.invoiceNumber,
       status: this.status,
       total: this.total,
+      customerName: this.customerName,
+      customerPhone: this.customerPhone,
+      customerAddress: this.customerAddress,
+      customerNote: this.customerNote,
+      isPrinted: this.isPrinted,
+      printedAt: this.printedAt,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       completedAt: this.completedAt,
@@ -146,8 +209,31 @@ export class Invoice {
       throw new InvoiceValidationError("A completed Invoice requires at least one item.");
     }
 
-    return new Invoice({ ...state, total });
+    const customerName = sanitizeNullableText(state.customerName);
+    const customerPhone = sanitizeNullableText(state.customerPhone);
+    const customerAddress = sanitizeNullableText(state.customerAddress);
+    const customerNote = sanitizeNullableText(state.customerNote);
+    const isPrinted = Boolean(state.isPrinted);
+    const printedAt = state.printedAt ? sanitizeNullableText(state.printedAt) : null;
+    if (printedAt !== null) validateTimestamp(printedAt, "printedAt");
+
+    return new Invoice({
+      ...state,
+      total,
+      customerName,
+      customerPhone,
+      customerAddress,
+      customerNote,
+      isPrinted,
+      printedAt,
+    });
   }
+}
+
+function sanitizeNullableText(value?: string | null): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function validateItems(invoiceId: string, items: readonly InvoiceItem[]): void {

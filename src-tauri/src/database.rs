@@ -84,6 +84,12 @@ pub struct InvoiceRecord {
     pub invoice_number: i64,
     pub status: String,
     pub total: i64,
+    pub customer_name: Option<String>,
+    pub customer_phone: Option<String>,
+    pub customer_address: Option<String>,
+    pub customer_note: Option<String>,
+    pub is_printed: bool,
+    pub printed_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
@@ -302,6 +308,17 @@ pub async fn delete_invoice_draft(
     delete_draft(&state.0, &id)
         .await
         .map_err(|error| invoice_persistence("delete_draft", error))
+}
+
+#[tauri::command]
+pub async fn mark_invoice_printed(
+    state: State<'_, DatabaseState>,
+    invoice_id: String,
+    printed_at: String,
+) -> Result<(), InvoiceCommandError> {
+    persist_mark_invoice_printed(&state.0, &invoice_id, &printed_at)
+        .await
+        .map_err(|error| invoice_persistence("mark_printed", error))
 }
 
 const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
@@ -556,6 +573,12 @@ async fn insert_invoice_draft(
         invoice_number: next_number,
         status: "draft".to_string(),
         total: 0,
+        customer_name: None,
+        customer_phone: None,
+        customer_address: None,
+        customer_note: None,
+        is_printed: false,
+        printed_at: None,
         created_at: input.created_at.clone(),
         updated_at: input.created_at,
         completed_at: None,
@@ -570,7 +593,7 @@ async fn fetch_invoice(
     let mut transaction = pool.begin().await?;
 
     let invoice_row = sqlx::query(
-        "SELECT id, invoice_number, status, total, created_at, updated_at, completed_at
+        "SELECT id, invoice_number, status, total, customer_name, customer_phone, customer_address, customer_note, is_printed, printed_at, created_at, updated_at, completed_at
          FROM invoices WHERE id = ?",
     )
     .bind(invoice_id)
@@ -620,6 +643,12 @@ async fn fetch_invoice(
         invoice_number: row.try_get("invoice_number")?,
         status: row.try_get("status")?,
         total: row.try_get("total")?,
+        customer_name: row.try_get("customer_name")?,
+        customer_phone: row.try_get("customer_phone")?,
+        customer_address: row.try_get("customer_address")?,
+        customer_note: row.try_get("customer_note")?,
+        is_printed: row.try_get::<i64, _>("is_printed")? == 1,
+        printed_at: row.try_get("printed_at")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
         completed_at: row.try_get("completed_at")?,
@@ -635,7 +664,7 @@ async fn fetch_invoices(
 
     let invoice_rows = if let Some(st) = status {
         sqlx::query(
-            "SELECT id, invoice_number, status, total, created_at, updated_at, completed_at
+            "SELECT id, invoice_number, status, total, customer_name, customer_phone, customer_address, customer_note, is_printed, printed_at, created_at, updated_at, completed_at
              FROM invoices WHERE status = ?
              ORDER BY updated_at DESC, invoice_number DESC",
         )
@@ -644,7 +673,7 @@ async fn fetch_invoices(
         .await?
     } else {
         sqlx::query(
-            "SELECT id, invoice_number, status, total, created_at, updated_at, completed_at
+            "SELECT id, invoice_number, status, total, customer_name, customer_phone, customer_address, customer_note, is_printed, printed_at, created_at, updated_at, completed_at
              FROM invoices
              ORDER BY updated_at DESC, invoice_number DESC",
         )
@@ -692,6 +721,12 @@ async fn fetch_invoices(
             invoice_number: row.try_get("invoice_number")?,
             status: row.try_get("status")?,
             total: row.try_get("total")?,
+            customer_name: row.try_get("customer_name")?,
+            customer_phone: row.try_get("customer_phone")?,
+            customer_address: row.try_get("customer_address")?,
+            customer_note: row.try_get("customer_note")?,
+            is_printed: row.try_get::<i64, _>("is_printed")? == 1,
+            printed_at: row.try_get("printed_at")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
             completed_at: row.try_get("completed_at")?,
@@ -717,6 +752,36 @@ async fn delete_draft(pool: &SqlitePool, invoice_id: &str) -> Result<(), sqlx::E
     Ok(())
 }
 
+async fn persist_mark_invoice_printed(
+    pool: &SqlitePool,
+    invoice_id: &str,
+    printed_at: &str,
+) -> Result<(), sqlx::Error> {
+    if !is_canonical_iso8601_utc(printed_at) {
+        return Err(sqlx::Error::Protocol(
+            "printed_at must be a canonical ISO-8601 UTC timestamp.".into(),
+        ));
+    }
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let update_result = sqlx::query(
+        "UPDATE invoices
+         SET is_printed = 1, printed_at = ?, updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(printed_at)
+    .bind(printed_at)
+    .bind(invoice_id)
+    .execute(&mut *transaction)
+    .await?;
+
+    if update_result.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    transaction.commit().await?;
+    Ok(())
+}
+
 async fn persist_draft_items_and_total(
     pool: &SqlitePool,
     invoice: InvoiceRecord,
@@ -732,10 +797,14 @@ async fn persist_draft_items_and_total(
 
     let update_result = sqlx::query(
         "UPDATE invoices
-         SET total = ?, updated_at = ?
+         SET total = ?, customer_name = ?, customer_phone = ?, customer_address = ?, customer_note = ?, updated_at = ?
          WHERE id = ? AND status = 'draft'",
     )
     .bind(calculated_total)
+    .bind(invoice.customer_name.as_deref())
+    .bind(invoice.customer_phone.as_deref())
+    .bind(invoice.customer_address.as_deref())
+    .bind(invoice.customer_note.as_deref())
     .bind(&invoice.updated_at)
     .bind(&invoice.id)
     .execute(&mut *transaction)
@@ -775,10 +844,14 @@ async fn persist_completed_invoice(
 
     let update_result = sqlx::query(
         "UPDATE invoices
-         SET status = 'completed', total = ?, updated_at = ?, completed_at = ?
+         SET status = 'completed', total = ?, customer_name = ?, customer_phone = ?, customer_address = ?, customer_note = ?, updated_at = ?, completed_at = ?
          WHERE id = ? AND status = 'draft'",
     )
     .bind(calculated_total)
+    .bind(invoice.customer_name.as_deref())
+    .bind(invoice.customer_phone.as_deref())
+    .bind(invoice.customer_address.as_deref())
+    .bind(invoice.customer_note.as_deref())
     .bind(&invoice.updated_at)
     .bind(completed_at)
     .bind(&invoice.id)
@@ -842,10 +915,14 @@ async fn persist_overwrite_completed(
 
     let update_result = sqlx::query(
         "UPDATE invoices
-         SET total = ?, updated_at = ?
+         SET total = ?, customer_name = ?, customer_phone = ?, customer_address = ?, customer_note = ?, updated_at = ?
          WHERE id = ? AND status = 'completed'",
     )
     .bind(calculated_total)
+    .bind(invoice.customer_name.as_deref())
+    .bind(invoice.customer_phone.as_deref())
+    .bind(invoice.customer_address.as_deref())
+    .bind(invoice.customer_note.as_deref())
     .bind(&invoice.updated_at)
     .bind(&invoice.id)
     .execute(&mut *transaction)

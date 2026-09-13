@@ -1,23 +1,33 @@
 import { useState } from "react";
 import "./App.css";
+import type { Invoice } from "../domain/entities/Invoice";
 import type { InvoiceScreenActions } from "./screens/CreateInvoiceScreen";
 import { CreateInvoiceScreen } from "./screens/CreateInvoiceScreen";
+import type { InvoiceHistoryActions } from "./screens/InvoiceHistoryScreen";
+import { InvoiceHistoryScreen } from "./screens/InvoiceHistoryScreen";
 import type { ProductManagementActions } from "./screens/ProductManagementScreen";
 import { ProductManagementScreen } from "./screens/ProductManagementScreen";
 
-export type AppScreen = "invoice" | "products";
+export type AppScreen = "invoice" | "products" | "history";
 
 export interface AppProps {
   readonly productActions: ProductManagementActions;
   readonly invoiceActions?: InvoiceScreenActions;
+  readonly invoiceHistoryActions?: InvoiceHistoryActions;
   readonly initialScreen?: AppScreen;
 }
 
-export function App({ productActions, invoiceActions, initialScreen }: AppProps) {
+export function App({
+  productActions,
+  invoiceActions,
+  invoiceHistoryActions,
+  initialScreen,
+}: AppProps) {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>(
     initialScreen ?? (invoiceActions ? "invoice" : "products"),
   );
   const [productQueryPrefill, setProductQueryPrefill] = useState<string | undefined>(undefined);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
 
   function handleNavigate(screen: AppScreen) {
     setCurrentScreen(screen);
@@ -31,6 +41,20 @@ export function App({ productActions, invoiceActions, initialScreen }: AppProps)
     setCurrentScreen("products");
   }
 
+  function handleSelectInvoiceForEdit(inv: Invoice) {
+    setEditingInvoice(inv);
+    setCurrentScreen("invoice");
+  }
+
+  const effectiveHistoryActions: InvoiceHistoryActions | undefined =
+    invoiceHistoryActions ??
+    (invoiceActions?.listInvoices
+      ? {
+          listInvoices: invoiceActions.listInvoices,
+          markInvoicePrinted: invoiceActions.markInvoicePrinted,
+        }
+      : undefined);
+
   return (
     <>
       {invoiceActions && (
@@ -40,8 +64,17 @@ export function App({ productActions, invoiceActions, initialScreen }: AppProps)
             activeScreen={currentScreen}
             onNavigate={handleNavigate}
             onNavigateToProducts={handleNavigateToProducts}
+            editingInvoice={editingInvoice}
           />
         </div>
+      )}
+      {effectiveHistoryActions && currentScreen === "history" && (
+        <InvoiceHistoryScreen
+          actions={effectiveHistoryActions}
+          activeScreen={currentScreen}
+          onNavigate={handleNavigate}
+          onSelectInvoiceForEdit={handleSelectInvoiceForEdit}
+        />
       )}
       {(!invoiceActions || currentScreen === "products") && (
         <ProductManagementScreen

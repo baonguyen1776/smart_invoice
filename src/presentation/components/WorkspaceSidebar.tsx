@@ -2,8 +2,8 @@ import { InvoiceIcon } from "./InvoiceIcon";
 import "./WorkspaceSidebar.css";
 
 interface WorkspaceSidebarProps {
-  readonly activeScreen: "invoice" | "products";
-  readonly onNavigate?: (screen: "invoice" | "products") => void;
+  readonly activeScreen: "invoice" | "products" | "history";
+  readonly onNavigate?: (screen: "invoice" | "products" | "history") => void;
 }
 
 export function WorkspaceSidebar({ activeScreen, onNavigate }: WorkspaceSidebarProps) {
@@ -24,6 +24,7 @@ export function WorkspaceSidebar({ activeScreen, onNavigate }: WorkspaceSidebarP
         {(
           [
             { screen: "invoice", label: "Tạo hóa đơn", icon: "receipt" },
+            { screen: "history", label: "Lịch sử", icon: "history" },
             { screen: "products", label: "Sản phẩm", icon: "box" },
           ] as const
         ).map(({ screen, label, icon }) => (
