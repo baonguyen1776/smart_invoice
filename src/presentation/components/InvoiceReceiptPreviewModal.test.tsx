@@ -160,22 +160,61 @@ describe("InvoiceReceiptPreviewModal", () => {
     expect(cols?.length).toBe(9);
   });
 
-  it("allows changing display row count dynamically via toolbar select", () => {
+  it("automatically fills table up to standard 14 rows without manual row controls", () => {
     const item = makeItem(ITEM_ID_1, PROD_ID_1, UNIT_ID_1, "Bút bi", "Cây", 1, 5000);
     const invoice = makeSampleInvoice([item]);
 
     render(<InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />);
 
-    const rowSelect = screen.getByLabelText("Số dòng:");
-    expect(rowSelect).toHaveValue("14");
+    // No manual dropdown
+    expect(screen.queryByLabelText("Số dòng:")).toBeNull();
 
-    // Change to 10 rows
-    fireEvent.change(rowSelect, { target: { value: "10" } });
-    expect(rowSelect).toHaveValue("10");
-
-    // 1 header + 1 item + 9 empty rows + 1 footer = 12 rows
+    // 1 header + 1 item + 13 empty rows + 1 footer = 16 rows automatically
     const rows = screen.getAllByRole("row");
-    expect(rows.length).toBe(12);
+    expect(rows.length).toBe(16);
+  });
+
+  it("toggles store branding header via dropdown and applies scaled layout", () => {
+    const item = makeItem(ITEM_ID_1, PROD_ID_1, UNIT_ID_1, "Bút bi", "Cây", 1, 5000);
+    const invoice = makeSampleInvoice([item]);
+
+    const { container } = render(
+      <InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />,
+    );
+
+    const storeSelect = screen.getByLabelText("In tin cửa hàng:");
+    expect(storeSelect).toHaveValue("full");
+    expect(screen.getByRole("heading", { name: "THU BA" })).toBeDefined();
+    expect(
+      screen.getByText("Địa chỉ : 299 -đường 3/2 - Ô 1 - khu 2 - xã Chợ Gạo - Đồng Tháp"),
+    ).toBeDefined();
+    expect(screen.getByText("SĐT : 0989,601,556 - 0984,831,636")).toBeDefined();
+    expect(screen.getByRole("heading", { name: "HÓA ĐƠN" })).toBeDefined();
+
+    const paper = container.querySelector(".thu-ba-invoice-paper");
+    expect(paper?.classList.contains("no-store-header")).toBe(false);
+
+    // Switch to "Không in tên cửa hàng"
+    fireEvent.change(storeSelect, { target: { value: "none" } });
+    expect(storeSelect).toHaveValue("none");
+
+    // Store branding lines omitted
+    expect(screen.queryByRole("heading", { name: "THU BA" })).toBeNull();
+    expect(
+      screen.queryByText("Địa chỉ : 299 -đường 3/2 - Ô 1 - khu 2 - xã Chợ Gạo - Đồng Tháp"),
+    ).toBeNull();
+    expect(screen.queryByText("SĐT : 0989,601,556 - 0984,831,636")).toBeNull();
+
+    // Title still present
+    expect(screen.getByRole("heading", { name: "HÓA ĐƠN" })).toBeDefined();
+
+    // Paper has scaled layout class
+    expect(paper?.classList.contains("no-store-header")).toBe(true);
+
+    // Switch back to "In đầy đủ thông tin cửa hàng"
+    fireEvent.change(storeSelect, { target: { value: "full" } });
+    expect(screen.getByRole("heading", { name: "THU BA" })).toBeDefined();
+    expect(paper?.classList.contains("no-store-header")).toBe(false);
   });
 
   it("handles print trigger via button click and Enter keyboard shortcut", () => {
@@ -237,5 +276,98 @@ describe("InvoiceReceiptPreviewModal", () => {
     const backdrop = screen.getByTestId("receipt-modal-backdrop");
     fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders large monetary amounts in tens of millions correctly", () => {
+    const item = makeItem(
+      ITEM_ID_1,
+      PROD_ID_1,
+      UNIT_ID_1,
+      "Máy in công nghiệp",
+      "Thùng",
+      3,
+      25000000,
+      1000, // 10%
+    );
+    const invoice = makeSampleInvoice([item]);
+
+    render(<InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />);
+
+    expect(screen.getByText("Thùng")).toBeDefined();
+    expect(screen.getByText("25.000.000")).toBeDefined();
+    expect(screen.getAllByText("75.000.000").length).toBe(2);
+    expect(screen.getAllByText("7.500.000").length).toBe(2);
+    expect(screen.getAllByText("67.500.000").length).toBe(2);
+  });
+
+  it("activates compact-mode styling on single page when invoice has 15-16 items", () => {
+    const items = Array.from({ length: 16 }, (_, i) => {
+      const hex = String(i + 1).padStart(12, "0");
+      return makeItem(
+        `77777777-7777-4777-8777-${hex}`,
+        `88888888-8888-4888-8888-${hex}`,
+        `99999999-9999-4999-8999-${hex}`,
+        `Mặt hàng ${i + 1}`,
+        "Cái",
+        1,
+        10000 * (i + 1),
+      );
+    });
+    const invoice = makeSampleInvoice(items);
+
+    const { container } = render(
+      <InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />,
+    );
+
+    const papers = container.querySelectorAll(".thu-ba-invoice-paper");
+    expect(papers.length).toBe(1);
+    expect(papers[0].classList.contains("compact-mode")).toBe(true);
+    expect(screen.getByText("Tổng Cộng")).toBeDefined();
+    expect(screen.queryByText(/Hóa đơn \d+ trang/)).toBeNull();
+  });
+
+  it("automatically paginates into multiple A5 sheets when invoice exceeds 16 items", () => {
+    const items = Array.from({ length: 20 }, (_, i) => {
+      const hex = String(i + 1).padStart(12, "0");
+      return makeItem(
+        `77777777-7777-4777-8777-${hex}`,
+        `88888888-8888-4888-8888-${hex}`,
+        `99999999-9999-4999-8999-${hex}`,
+        `Sản phẩm số ${i + 1}`,
+        "Thùng",
+        2,
+        50000,
+      );
+    });
+    const invoice = makeSampleInvoice(items);
+
+    const { container } = render(
+      <InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />,
+    );
+
+    // Multi-page badge in toolbar
+    expect(screen.getByText("Hóa đơn 2 trang (Tự động chia trang)")).toBeDefined();
+
+    // 2 paper sheets rendered
+    const papers = container.querySelectorAll(".thu-ba-invoice-paper");
+    expect(papers.length).toBe(2);
+
+    // Neither uses compact-mode since each page has standard 14 rows
+    expect(papers[0].classList.contains("compact-mode")).toBe(false);
+    expect(papers[1].classList.contains("compact-mode")).toBe(false);
+
+    // Page 1 header & running total
+    expect(screen.getByText("Cộng chuyển trang sau (Trang 1/2)")).toBeDefined();
+    // Page 2 header & final total
+    expect(screen.getByText("HÓA ĐƠN (Tiếp theo)")).toBeDefined();
+    expect(screen.getByText("Trang 2/2")).toBeDefined();
+    expect(screen.getByText("Tổng Cộng")).toBeDefined();
+
+    // Verify row counts on Page 2: 6 items (index 15..20) + 8 empty rows
+    const page2 = papers[1];
+    const page2ItemRows = page2.querySelectorAll("tbody tr.item-row");
+    expect(page2ItemRows.length).toBe(6);
+    const page2EmptyRows = page2.querySelectorAll("tbody tr.empty-row");
+    expect(page2EmptyRows.length).toBe(8);
   });
 });
