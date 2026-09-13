@@ -182,6 +182,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  overflow: hidden;
 }
 
 /* Store Header */
@@ -242,19 +243,21 @@
   font-weight: normal;
 }
 
-/* 9-Column Table Layout: Scaled Proportions Giving ~44% to Product Name */
+/* 9-Column Table Layout: Proportional Scaling Totaling Exactly 100% */
 .thu-ba-table {
-  width: 100%;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
   border-collapse: collapse;
-  font-size: 13.5px;
-  table-layout: fixed;
+  font-size: 13px;
+  table-layout: fixed !important;
   flex: 1;
 }
 
 .thu-ba-table th,
 .thu-ba-table td {
   border: 1px solid #000000;
-  padding: 3px 5px;
+  padding: 3px 4px;
   vertical-align: middle;
   box-sizing: border-box;
 }
@@ -269,33 +272,79 @@
   font-size: 13px;
 }
 
-.th-stt {
-  width: 30px;
+.th-stt,
+.col-stt {
+  width: 4.5% !important;
 }
-.th-name {
-  width: auto;
+.th-name,
+.col-name {
+  width: 36.5% !important;
   text-align: center;
 }
-.th-unit {
-  width: 44px;
+.th-unit,
+.col-unit {
+  width: 6% !important;
 }
-.th-qty {
-  width: 44px;
+.th-qty,
+.col-qty {
+  width: 6% !important;
 }
-.th-price {
-  width: 75px;
+.th-price,
+.col-price {
+  width: 10.5% !important;
 }
-.th-subtotal {
-  width: 85px;
+.th-subtotal,
+.col-subtotal {
+  width: 11.5% !important;
 }
-.th-ck {
-  width: 38px;
+.th-ck,
+.col-ck {
+  width: 5% !important;
 }
-.th-ck-amount {
-  width: 68px;
+.th-ck-amount,
+.col-ck-amount {
+  width: 9% !important;
 }
-.th-payment {
-  width: 92px;
+.th-payment,
+.col-payment {
+  width: 11% !important;
+}
+
+.thu-ba-table th:nth-child(1),
+.thu-ba-table td:nth-child(1) {
+  width: 4.5% !important;
+}
+.thu-ba-table th:nth-child(2),
+.thu-ba-table td:nth-child(2) {
+  width: 36.5% !important;
+}
+.thu-ba-table th:nth-child(3),
+.thu-ba-table td:nth-child(3) {
+  width: 6% !important;
+}
+.thu-ba-table th:nth-child(4),
+.thu-ba-table td:nth-child(4) {
+  width: 6% !important;
+}
+.thu-ba-table th:nth-child(5),
+.thu-ba-table td:nth-child(5) {
+  width: 10.5% !important;
+}
+.thu-ba-table th:nth-child(6),
+.thu-ba-table td:nth-child(6) {
+  width: 11.5% !important;
+}
+.thu-ba-table th:nth-child(7),
+.thu-ba-table td:nth-child(7) {
+  width: 5% !important;
+}
+.thu-ba-table th:nth-child(8),
+.thu-ba-table td:nth-child(8) {
+  width: 9% !important;
+}
+.thu-ba-table th:nth-child(9),
+.thu-ba-table td:nth-child(9) {
+  width: 11% !important;
 }
 
 /* Table Body Cells */
@@ -305,30 +354,40 @@
 
 .td-stt {
   text-align: center;
+  white-space: nowrap;
 }
 .td-name {
   text-align: left;
+  white-space: normal;
+  word-break: break-word;
 }
 .td-unit {
   text-align: center;
+  white-space: nowrap;
 }
 .td-qty {
   text-align: right;
+  white-space: nowrap;
 }
 .td-price {
   text-align: right;
+  white-space: nowrap;
 }
 .td-subtotal {
   text-align: right;
+  white-space: nowrap;
 }
 .td-ck {
   text-align: center;
+  white-space: nowrap;
 }
 .td-ck-amount {
   text-align: right;
+  white-space: nowrap;
 }
 .td-payment {
   text-align: right;
+  white-space: nowrap;
 }
 
 .item-product-name {

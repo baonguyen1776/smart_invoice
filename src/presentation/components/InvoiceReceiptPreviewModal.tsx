@@ -178,6 +178,17 @@ export function InvoiceReceiptPreviewModal({
             </div>
 
             <table className="thu-ba-table">
+              <colgroup>
+                <col className="col-stt" style={{ width: "4.5%" }} />
+                <col className="col-name" style={{ width: "36.5%" }} />
+                <col className="col-unit" style={{ width: "6%" }} />
+                <col className="col-qty" style={{ width: "6%" }} />
+                <col className="col-price" style={{ width: "10.5%" }} />
+                <col className="col-subtotal" style={{ width: "11.5%" }} />
+                <col className="col-ck" style={{ width: "5%" }} />
+                <col className="col-ck-amount" style={{ width: "9%" }} />
+                <col className="col-payment" style={{ width: "11%" }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th className="th-stt">Stt</th>

@@ -414,13 +414,13 @@ select:focus {
   overflow-x: auto;
   border-top: 1px solid var(--border);
 }
-table {
+.table-scroll table {
   width: 100%;
   min-width: 980px;
   border-collapse: collapse;
   table-layout: fixed;
 }
-th {
+.table-scroll th {
   padding: 11px 16px;
   color: #5f6f89;
   background: #f5f8ff;
@@ -430,25 +430,25 @@ th {
   text-align: left;
   text-transform: none;
 }
-th:nth-child(1) {
+.table-scroll th:nth-child(1) {
   width: 24%;
 }
-th:nth-child(2) {
+.table-scroll th:nth-child(2) {
   width: 13%;
 }
-th:nth-child(3) {
+.table-scroll th:nth-child(3) {
   width: 15%;
 }
-th:nth-child(4) {
+.table-scroll th:nth-child(4) {
   width: 23%;
 }
-th:nth-child(5) {
+.table-scroll th:nth-child(5) {
   width: 11%;
 }
-th:nth-child(6) {
+.table-scroll th:nth-child(6) {
   width: 14%;
 }
-td {
+.table-scroll td {
   min-width: 0;
   padding: 14px 16px;
   border-top: 1px solid #e9ece9;
@@ -456,10 +456,10 @@ td {
   font-size: var(--font-size-table);
   vertical-align: middle;
 }
-tbody tr:hover {
+.table-scroll tbody tr:hover {
   background: #f7faff;
 }
-tbody tr {
+.table-scroll tbody tr {
   transition: background-color 150ms ease;
 }
 .product-cell {
