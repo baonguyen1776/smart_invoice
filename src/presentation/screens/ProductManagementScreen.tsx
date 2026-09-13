@@ -22,8 +22,8 @@ export interface ProductManagementActions {
 
 export interface ProductManagementScreenProps {
   readonly actions: ProductManagementActions;
-  readonly onNavigate?: (screen: "invoice" | "products") => void;
-  readonly activeScreen?: "invoice" | "products";
+  readonly onNavigate?: (screen: "invoice" | "products" | "history") => void;
+  readonly activeScreen?: "invoice" | "products" | "history";
   readonly initialCreateQuery?: string;
 }
 interface UnitDraft {
