@@ -69,27 +69,36 @@
   gap: 0.75rem;
 }
 
-.receipt-toolbar-row-control {
+/* Toolbar Store Header Selector */
+.receipt-toolbar-header-control {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.825rem;
-  font-weight: 500;
-  color: var(--text-secondary, #475569);
+  gap: 0.5rem;
 }
 
-.receipt-row-select {
-  font-size: 0.825rem;
-  padding: 0.3rem 0.6rem;
-  border-radius: 6px;
+.receipt-toolbar-header-control label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+  white-space: nowrap;
+}
+
+.receipt-header-select {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 500;
   border: 1px solid var(--border-subtle, #cbd5e1);
-  background: #ffffff;
+  border-radius: 6px;
+  background-color: var(--surface, #ffffff);
   color: var(--text-primary, #0f172a);
   cursor: pointer;
   outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.receipt-row-select:focus {
+.receipt-header-select:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
@@ -165,7 +174,9 @@
   overflow-y: auto;
   background: #cbd5e1;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
 }
 
 /* Physical Paper Simulation: THU BA Template (A5 Landscape: 210mm x 148mm) */
@@ -173,58 +184,110 @@
   width: 210mm;
   max-width: 840px;
   min-height: 148mm;
+  height: 148mm;
+  max-height: 148mm;
   background: #ffffff;
   color: #000000;
   font-family: "Times New Roman", Times, serif;
-  padding: 6mm 8mm;
+  padding: 4mm 8mm 3mm 8mm;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
+  position: relative;
 }
 
 /* Store Header */
 .thu-ba-header {
   text-align: center;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .store-name {
-  font-size: 26px;
+  font-size: 23px;
   font-weight: bold;
   letter-spacing: 0.04em;
   margin: 0;
   text-transform: uppercase;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 .store-address,
 .store-phone {
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-style: italic;
   font-weight: bold;
-  margin: 2px 0;
-  line-height: 1.2;
+  margin: 1px 0;
+  line-height: 1.15;
 }
 
 .invoice-title {
-  font-size: 24px;
+  font-size: 21px;
   font-weight: bold;
-  margin: 4px 0 6px;
+  margin: 2px 0 3px;
   letter-spacing: 0.08em;
   line-height: 1.15;
+}
+
+.invoice-title-page-tag {
+  font-size: 14px;
+  font-weight: bold;
+  margin-left: 8px;
+  letter-spacing: normal;
+}
+
+.thu-ba-header-subpage {
+  text-align: left;
+  margin-bottom: 3px;
+}
+
+.subpage-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1.5px solid #000000;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+}
+
+.subpage-store-name {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.subpage-invoice-title {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.subpage-page-tag {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.receipt-multipage-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #2563eb;
+  background: #dbeafe;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
 /* Customer Section — Clean, No Dotted Lines, No Invoice# or Date */
 .customer-info-section {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-bottom: 6px;
-  font-size: 14px;
-  line-height: 1.3;
+  gap: 2px;
+  margin-bottom: 3px;
+  font-size: 13px;
+  line-height: 1.25;
 }
 
 .customer-row {
@@ -234,7 +297,7 @@
 }
 
 .customer-row-label {
-  min-width: 95px;
+  min-width: 90px;
   flex-shrink: 0;
   font-weight: bold;
 }
@@ -249,7 +312,7 @@
   min-width: 0 !important;
   max-width: 100% !important;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12.5px;
   table-layout: fixed !important;
   flex: 1;
 }
@@ -257,7 +320,7 @@
 .thu-ba-table th,
 .thu-ba-table td {
   border: 1px solid #000000;
-  padding: 3px 4px;
+  padding: 2px 3px;
   vertical-align: middle;
   box-sizing: border-box;
 }
@@ -267,89 +330,61 @@
   background-color: #ffff00;
   font-weight: bold;
   text-align: center;
-  height: 24px;
-  padding: 3px 2px;
-  font-size: 13px;
+  height: 22px;
+  padding: 2px 2px;
+  font-size: 12px;
 }
 
 .th-stt,
-.col-stt {
-  width: 4.5% !important;
+.col-stt,
+.thu-ba-table th:nth-child(1) {
+  width: 3.5% !important;
 }
 .th-name,
-.col-name {
-  width: 36.5% !important;
+.col-name,
+.thu-ba-table th:nth-child(2) {
+  width: 32.5% !important;
   text-align: center;
 }
 .th-unit,
-.col-unit {
-  width: 6% !important;
+.col-unit,
+.thu-ba-table th:nth-child(3) {
+  width: 6.5% !important;
 }
 .th-qty,
-.col-qty {
-  width: 6% !important;
+.col-qty,
+.thu-ba-table th:nth-child(4) {
+  width: 5.5% !important;
 }
 .th-price,
-.col-price {
-  width: 10.5% !important;
+.col-price,
+.thu-ba-table th:nth-child(5) {
+  width: 11% !important;
 }
 .th-subtotal,
-.col-subtotal {
-  width: 11.5% !important;
+.col-subtotal,
+.thu-ba-table th:nth-child(6) {
+  width: 13% !important;
 }
 .th-ck,
-.col-ck {
-  width: 5% !important;
-}
-.th-ck-amount,
-.col-ck-amount {
-  width: 9% !important;
-}
-.th-payment,
-.col-payment {
-  width: 11% !important;
-}
-
-.thu-ba-table th:nth-child(1),
-.thu-ba-table td:nth-child(1) {
+.col-ck,
+.thu-ba-table th:nth-child(7) {
   width: 4.5% !important;
 }
-.thu-ba-table th:nth-child(2),
-.thu-ba-table td:nth-child(2) {
-  width: 36.5% !important;
+.th-ck-amount,
+.col-ck-amount,
+.thu-ba-table th:nth-child(8) {
+  width: 10% !important;
 }
-.thu-ba-table th:nth-child(3),
-.thu-ba-table td:nth-child(3) {
-  width: 6% !important;
-}
-.thu-ba-table th:nth-child(4),
-.thu-ba-table td:nth-child(4) {
-  width: 6% !important;
-}
-.thu-ba-table th:nth-child(5),
-.thu-ba-table td:nth-child(5) {
-  width: 10.5% !important;
-}
-.thu-ba-table th:nth-child(6),
-.thu-ba-table td:nth-child(6) {
-  width: 11.5% !important;
-}
-.thu-ba-table th:nth-child(7),
-.thu-ba-table td:nth-child(7) {
-  width: 5% !important;
-}
-.thu-ba-table th:nth-child(8),
-.thu-ba-table td:nth-child(8) {
-  width: 9% !important;
-}
-.thu-ba-table th:nth-child(9),
-.thu-ba-table td:nth-child(9) {
-  width: 11% !important;
+.th-payment,
+.col-payment,
+.thu-ba-table th:nth-child(9) {
+  width: 13.5% !important;
 }
 
 /* Table Body Cells */
 .thu-ba-table tbody td {
-  height: 20px;
+  height: 22px;
 }
 
 .td-stt {
@@ -372,10 +407,14 @@
 .td-price {
   text-align: right;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
 }
 .td-subtotal {
   text-align: right;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
 }
 .td-ck {
   text-align: center;
@@ -384,10 +423,14 @@
 .td-ck-amount {
   text-align: right;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
 }
 .td-payment {
   text-align: right;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
 }
 
 .item-product-name {
@@ -396,7 +439,7 @@
 }
 
 .item-line-note {
-  font-size: 11.5px;
+  font-size: 11px;
   font-style: italic;
   color: #444444;
   margin-left: 4px;
@@ -404,20 +447,21 @@
 
 .empty-row td {
   color: #666666;
-  height: 20px;
+  height: 22px;
 }
 
 /* Footer / Total Row */
 .thu-ba-total-row td {
   background-color: #ffff00;
   font-weight: bold;
-  padding: 4px 5px;
-  height: 26px;
+  padding: 2px 3px !important;
+  height: 24px;
+  box-sizing: border-box;
 }
 
 .td-total-label {
   text-align: center;
-  font-size: 14.5px;
+  font-size: 13px;
 }
 
 .td-ck-white {
@@ -425,45 +469,130 @@
   border: 1px solid #000000;
 }
 
+.td-total-subtotal,
+.td-total-ck,
 .td-total-payment {
-  font-size: 14.5px;
+  font-size: 13px;
   font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
 }
 
-/* Compact Mode for Invoices with > 14 items to preserve 1 sheet */
+/* Compact Mode for Invoices with 15-16 items on single page */
 .thu-ba-invoice-paper.compact-mode {
-  padding: 4mm 6mm;
+  padding: 2.5mm 6mm 2mm 6mm;
 }
 
 .thu-ba-invoice-paper.compact-mode .thu-ba-table tbody td {
   height: 18px;
-  padding: 2px 4px;
-  font-size: 12.5px;
+  padding: 1px 2px;
+  font-size: 11.5px;
 }
 
 .thu-ba-invoice-paper.compact-mode .store-name {
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .thu-ba-invoice-paper.compact-mode .invoice-title {
-  font-size: 20px;
-  margin: 2px 0 4px;
+  font-size: 18px;
+  margin: 1px 0 2px;
+}
+
+/* Scaled Layout when Store Header is Omitted ("Không in tên cửa hàng") */
+.thu-ba-invoice-paper.no-store-header {
+  padding: 6mm 8mm 4.5mm 8mm;
+}
+
+.thu-ba-invoice-paper.no-store-header .thu-ba-header {
+  margin-bottom: 6px;
+}
+
+.thu-ba-invoice-paper.no-store-header .invoice-title {
+  font-size: 24px;
+  margin: 2px 0 6px;
+  letter-spacing: 0.1em;
+}
+
+.thu-ba-invoice-paper.no-store-header .subpage-header-row {
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+}
+
+.thu-ba-invoice-paper.no-store-header .subpage-invoice-title {
+  font-size: 18px;
+}
+
+.thu-ba-invoice-paper.no-store-header .subpage-page-tag {
+  font-size: 14px;
+}
+
+.thu-ba-invoice-paper.no-store-header .customer-info-section {
+  margin-bottom: 8px;
+  font-size: 13.5px;
+  line-height: 1.32;
+  gap: 3px;
+}
+
+.thu-ba-invoice-paper.no-store-header .thu-ba-table {
+  font-size: 13px;
+}
+
+.thu-ba-invoice-paper.no-store-header .thu-ba-table thead th {
+  height: 25px;
+  font-size: 12.5px;
+  padding: 3px 2px;
+}
+
+.thu-ba-invoice-paper.no-store-header .thu-ba-table tbody td {
+  height: 25px;
+  font-size: 13px;
+  padding: 2px 3px;
+}
+
+.thu-ba-invoice-paper.no-store-header .empty-row td {
+  height: 25px;
+}
+
+.thu-ba-invoice-paper.no-store-header .thu-ba-total-row td {
+  height: 26px;
+  padding: 3px 3px !important;
+}
+
+.thu-ba-invoice-paper.no-store-header .td-total-label,
+.thu-ba-invoice-paper.no-store-header .td-total-subtotal,
+.thu-ba-invoice-paper.no-store-header .td-total-ck,
+.thu-ba-invoice-paper.no-store-header .td-total-payment {
+  font-size: 13.5px;
+}
+
+/* Compact mode under no-store-header (for 15-16 items without store header) */
+.thu-ba-invoice-paper.no-store-header.compact-mode {
+  padding: 4mm 8mm 3mm 8mm;
+}
+
+.thu-ba-invoice-paper.no-store-header.compact-mode .thu-ba-table tbody td {
+  height: 21px;
+  font-size: 12px;
+}
+
+.thu-ba-invoice-paper.no-store-header.compact-mode .thu-ba-table thead th {
+  height: 23px;
+  font-size: 12px;
+}
+
+.thu-ba-invoice-paper.no-store-header.compact-mode .thu-ba-total-row td {
+  height: 24px;
 }
 
 /* Print Styles */
 @media print {
   @page {
     size: A5 landscape;
-    margin: 6mm 8mm;
+    margin: 4mm 8mm 3mm 8mm;
   }
 
   body * {
     visibility: hidden;
-  }
-
-  .thu-ba-invoice-paper,
-  .thu-ba-invoice-paper * {
-    visibility: visible;
   }
 
   .receipt-modal-backdrop,
@@ -482,16 +611,30 @@
     display: block !important;
   }
 
+  .thu-ba-invoice-paper,
+  .thu-ba-invoice-paper * {
+    visibility: visible;
+  }
+
   .thu-ba-invoice-paper {
-    position: fixed;
-    left: 0;
-    top: 0;
+    position: relative !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+    height: 148mm !important;
+    max-height: 148mm !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .thu-ba-invoice-paper:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
   }
 
   .no-print {
