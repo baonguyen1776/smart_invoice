@@ -22,6 +22,7 @@ pub fn run() {
             database::overwrite_completed_invoice,
             database::list_invoices,
             database::delete_invoice_draft,
+            database::mark_invoice_printed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");
