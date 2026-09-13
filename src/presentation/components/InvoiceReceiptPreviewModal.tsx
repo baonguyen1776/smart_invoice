@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Invoice } from "../../domain/entities/Invoice";
 import { sumInvoiceAmounts } from "../../domain/rules/CalculateInvoiceAmounts";
 import { InvoiceIcon } from "./InvoiceIcon";
@@ -30,6 +30,8 @@ export function InvoiceReceiptPreviewModal({
   onPrint,
   onNewDraft,
 }: InvoiceReceiptPreviewModalProps) {
+  const [displayRowCount, setDisplayRowCount] = useState<number>(MINIMUM_DISPLAY_ROWS);
+
   const totals = useMemo(() => {
     if (!invoice || invoice.items.length === 0) {
       return { subtotal: 0, discountAmount: 0, payment: 0 };
@@ -78,23 +80,8 @@ export function InvoiceReceiptPreviewModal({
   }
 
   const items = invoice.items;
-  const emptyRowsCount = Math.max(0, MINIMUM_DISPLAY_ROWS - items.length);
-
-  const formattedDate = (() => {
-    const raw = invoice.completedAt || invoice.updatedAt || invoice.createdAt;
-    try {
-      const d = new Date(raw);
-      if (isNaN(d.getTime())) return raw;
-      const hours = String(d.getHours()).padStart(2, "0");
-      const mins = String(d.getMinutes()).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const year = d.getFullYear();
-      return `${hours}:${mins} ${day}/${month}/${year}`;
-    } catch {
-      return raw;
-    }
-  })();
+  const emptyRowsCount = Math.max(0, displayRowCount - items.length);
+  const isCompact = items.length > 14;
 
   const customerAddress = customer?.address || (customer?.phone ? `SĐT: ${customer.phone}` : "");
 
@@ -121,6 +108,20 @@ export function InvoiceReceiptPreviewModal({
             </span>
           </div>
           <div className="receipt-toolbar-actions">
+            <div className="receipt-toolbar-row-control">
+              <label htmlFor="receipt-row-select">Số dòng:</label>
+              <select
+                id="receipt-row-select"
+                value={displayRowCount}
+                onChange={(e) => setDisplayRowCount(Number(e.target.value))}
+                className="receipt-row-select"
+              >
+                <option value={14}>14 dòng (Chuẩn A5)</option>
+                <option value={12}>12 dòng</option>
+                <option value={10}>10 dòng</option>
+                <option value={items.length}>Chỉ sản phẩm ({items.length})</option>
+              </select>
+            </div>
             {onNewDraft && (
               <button
                 type="button"
@@ -152,7 +153,10 @@ export function InvoiceReceiptPreviewModal({
         </header>
 
         <div className="receipt-paper-scroll">
-          <div className="thu-ba-invoice-paper" id="thu-ba-invoice-print-area">
+          <div
+            className={`thu-ba-invoice-paper ${isCompact ? "compact-mode" : ""}`}
+            id="thu-ba-invoice-print-area"
+          >
             <div className="thu-ba-header">
               <h2 className="store-name">THU BA</h2>
               <p className="store-address">
@@ -166,20 +170,10 @@ export function InvoiceReceiptPreviewModal({
               <div className="customer-row">
                 <span className="customer-row-label">Khách hàng:</span>
                 <span className="customer-row-val">{customer?.name || ""}</span>
-                <div className="customer-row-line" />
               </div>
               <div className="customer-row">
                 <span className="customer-row-label">Địa chỉ:</span>
                 <span className="customer-row-val">{customerAddress}</span>
-                <div className="customer-row-line" />
-              </div>
-              <div className="receipt-meta-row">
-                <span>
-                  Số HĐ: <strong>#{String(invoice.invoiceNumber).padStart(6, "0")}</strong>
-                </span>
-                <span>
-                  Ngày: <strong>{formattedDate}</strong>
-                </span>
               </div>
             </div>
 
@@ -189,11 +183,7 @@ export function InvoiceReceiptPreviewModal({
                   <th className="th-stt">Stt</th>
                   <th className="th-name">Tên hàng hóa</th>
                   <th className="th-unit">Đvt</th>
-                  <th className="th-qty">
-                    Số
-                    <br />
-                    lượng
-                  </th>
+                  <th className="th-qty">Số lượng</th>
                   <th className="th-price">Đơn giá</th>
                   <th className="th-subtotal">Thành tiền</th>
                   <th className="th-ck">CK</th>

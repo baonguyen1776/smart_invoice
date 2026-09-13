@@ -115,11 +115,17 @@ describe("InvoiceReceiptPreviewModal", () => {
     expect(screen.getByText("SĐT : 0989,601,556 - 0984,831,636")).toBeDefined();
     expect(screen.getByRole("heading", { name: "HÓA ĐƠN" })).toBeDefined();
 
-    // Customer info
+    // Customer info: Clean, no dotted lines
     expect(screen.getByText("Nguyễn Phương Gia Bảo")).toBeDefined();
     expect(screen.getByText("299 Đường 3/2, Chợ Gạo, Đồng Tháp")).toBeDefined();
+    expect(document.querySelector(".customer-row-line")).toBeNull();
 
-    // Invoice Number
+    // Print paper area: No invoice number or date
+    const printArea = document.getElementById("thu-ba-invoice-print-area");
+    expect(printArea?.textContent).not.toContain("Số HĐ:");
+    expect(printArea?.textContent).not.toContain("Ngày:");
+
+    // Toolbar (no-print) still shows invoice number for screen reference
     expect(screen.getAllByText("#000001").length).toBeGreaterThanOrEqual(1);
 
     // Table Column Headers
@@ -139,13 +145,31 @@ describe("InvoiceReceiptPreviewModal", () => {
     expect(screen.getByText("Bút bi Thiên Long")).toBeDefined();
     expect(screen.getByText("5%")).toBeDefined();
 
-    // Minimum 14 rows padded
+    // Default 14 rows padded
     const rows = screen.getAllByRole("row");
     // header row (1) + 2 items + 12 empty rows + 1 footer row = 16 rows
     expect(rows.length).toBeGreaterThanOrEqual(15);
 
     // Total row
     expect(screen.getByText("Tổng Cộng")).toBeDefined();
+  });
+
+  it("allows changing display row count dynamically via toolbar select", () => {
+    const item = makeItem(ITEM_ID_1, PROD_ID_1, UNIT_ID_1, "Bút bi", "Cây", 1, 5000);
+    const invoice = makeSampleInvoice([item]);
+
+    render(<InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />);
+
+    const rowSelect = screen.getByLabelText("Số dòng:");
+    expect(rowSelect).toHaveValue("14");
+
+    // Change to 10 rows
+    fireEvent.change(rowSelect, { target: { value: "10" } });
+    expect(rowSelect).toHaveValue("10");
+
+    // 1 header + 1 item + 9 empty rows + 1 footer = 12 rows
+    const rows = screen.getAllByRole("row");
+    expect(rows.length).toBe(12);
   });
 
   it("handles print trigger via button click and Enter keyboard shortcut", () => {
