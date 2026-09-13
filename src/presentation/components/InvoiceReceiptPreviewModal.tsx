@@ -19,6 +19,7 @@ export interface InvoiceReceiptPreviewModalProps {
   readonly onClose: () => void;
   readonly onPrint?: () => void;
   readonly onNewDraft?: () => void;
+  readonly onEdit?: () => void;
 }
 
 const SINGLE_PAGE_STANDARD_ROWS = 14;
@@ -45,6 +46,7 @@ export function InvoiceReceiptPreviewModal({
   onClose,
   onPrint,
   onNewDraft,
+  onEdit,
 }: InvoiceReceiptPreviewModalProps) {
   const [includeStoreHeader, setIncludeStoreHeader] = useState<boolean>(true);
 
@@ -150,7 +152,12 @@ export function InvoiceReceiptPreviewModal({
     return null;
   }
 
-  const customerAddress = customer?.address || (customer?.phone ? `SĐT: ${customer.phone}` : "");
+  const resolvedCustomerName = customer?.name ?? invoice.customerName ?? "";
+  const resolvedCustomerPhone = customer?.phone ?? invoice.customerPhone ?? "";
+  const resolvedCustomerAddress =
+    customer?.address ??
+    invoice.customerAddress ??
+    (resolvedCustomerPhone ? `SĐT: ${resolvedCustomerPhone}` : "");
 
   return (
     <div
@@ -192,6 +199,17 @@ export function InvoiceReceiptPreviewModal({
                 <option value="none">Không in</option>
               </select>
             </div>
+            {onEdit && (
+              <button
+                type="button"
+                className="secondary-button btn-receipt-edit"
+                onClick={onEdit}
+                title="Mở chỉnh sửa đơn này trên quầy thu ngân"
+              >
+                <InvoiceIcon name="edit" size={15} />
+                Sửa hóa đơn
+              </button>
+            )}
             {onNewDraft && (
               <button
                 type="button"
@@ -272,11 +290,11 @@ export function InvoiceReceiptPreviewModal({
                 <div className="customer-info-section">
                   <div className="customer-row">
                     <span className="customer-row-label">Khách hàng:</span>
-                    <span className="customer-row-val">{customer?.name || ""}</span>
+                    <span className="customer-row-val">{resolvedCustomerName}</span>
                   </div>
                   <div className="customer-row">
                     <span className="customer-row-label">Địa chỉ:</span>
-                    <span className="customer-row-val">{customerAddress}</span>
+                    <span className="customer-row-val">{resolvedCustomerAddress}</span>
                   </div>
                 </div>
 
@@ -358,14 +376,22 @@ export function InvoiceReceiptPreviewModal({
                           : `Cộng chuyển trang sau (Trang ${page.pageNumber}/${page.totalPages})`}
                       </td>
                       <td className="td-subtotal td-total-subtotal">
-                        {page.pageSubtotal > 0 ? page.pageSubtotal.toLocaleString("vi-VN") : "-"}
+                        {page.pageSubtotal !== 0
+                          ? page.pageSubtotal < 0
+                            ? `(${Math.abs(page.pageSubtotal).toLocaleString("vi-VN")})`
+                            : page.pageSubtotal.toLocaleString("vi-VN")
+                          : "-"}
                       </td>
                       <td className="td-ck-white" />
                       <td className="td-ck-amount td-total-ck">
                         {page.pageDiscount > 0 ? page.pageDiscount.toLocaleString("vi-VN") : "-"}
                       </td>
                       <td className="td-payment td-total-payment">
-                        {page.pagePayment > 0 ? page.pagePayment.toLocaleString("vi-VN") : "-"}
+                        {page.pagePayment !== 0
+                          ? page.pagePayment < 0
+                            ? `(${Math.abs(page.pagePayment).toLocaleString("vi-VN")})`
+                            : page.pagePayment.toLocaleString("vi-VN")
+                          : "-"}
                       </td>
                     </tr>
                   </tfoot>

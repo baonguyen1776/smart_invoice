@@ -370,4 +370,20 @@ describe("InvoiceReceiptPreviewModal", () => {
     const page2EmptyRows = page2.querySelectorAll("tbody tr.empty-row");
     expect(page2EmptyRows.length).toBe(8);
   });
+
+  it("formats negative subtotal and payment with parentheses in total footer", () => {
+    const returnItem = makeItem(
+      ITEM_ID_1,
+      PROD_ID_1,
+      UNIT_ID_1,
+      "Hàng trả lại - Xi măng",
+      "Bao",
+      -2,
+      90000,
+    );
+    const invoice = makeSampleInvoice([returnItem]);
+    render(<InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />);
+
+    expect(screen.getAllByText("(180.000)").length).toBeGreaterThanOrEqual(1);
+  });
 });
