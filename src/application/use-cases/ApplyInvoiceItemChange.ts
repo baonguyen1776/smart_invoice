@@ -49,6 +49,12 @@ export type InvoiceItemChange =
 export interface ApplyInvoiceItemChangeInput {
   readonly invoiceId: string;
   readonly change: InvoiceItemChange;
+  readonly customer?: {
+    readonly name?: string | null;
+    readonly phone?: string | null;
+    readonly address?: string | null;
+    readonly note?: string | null;
+  };
 }
 
 class InvoiceItemMissingError extends Error {
@@ -71,7 +77,10 @@ export class ApplyInvoiceItemChange {
     try {
       const now = this.clock.now();
       const items = this.applyChange(loaded.value, input.change, now);
-      const invoice = loaded.value.replaceDraftItems(items, now);
+      let invoice = loaded.value.replaceDraftItems(items, now);
+      if (input.customer) {
+        invoice = invoice.withCustomer(input.customer, now);
+      }
       const saved = await this.repository.saveDraft(invoice);
       return saved.ok ? ok(invoice) : saved;
     } catch (error) {

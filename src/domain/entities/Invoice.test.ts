@@ -157,4 +157,55 @@ describe("Invoice", () => {
       }),
     ).toThrow(InvoiceValidationError);
   });
+
+  it("creates draft with customer info and updates customer metadata via withCustomer", () => {
+    const draft = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      createdAt: CREATED_AT,
+      customerName: "Nguyễn Văn A",
+      customerPhone: "0901234567",
+      customerAddress: "Hà Nội",
+      customerNote: "Giao gấp",
+    });
+
+    expect(draft.customerName).toBe("Nguyễn Văn A");
+    expect(draft.customerPhone).toBe("0901234567");
+    expect(draft.customerAddress).toBe("Hà Nội");
+    expect(draft.customerNote).toBe("Giao gấp");
+    expect(draft.isPrinted).toBe(false);
+    expect(draft.printedAt).toBeNull();
+
+    const updated = draft.withCustomer(
+      {
+        name: "Trần Thị B",
+        phone: "0987654321",
+        address: "TP.HCM",
+        note: "Đã cọc",
+      },
+      UPDATED_AT,
+    );
+
+    expect(updated.customerName).toBe("Trần Thị B");
+    expect(updated.customerPhone).toBe("0987654321");
+    expect(updated.customerAddress).toBe("TP.HCM");
+    expect(updated.customerNote).toBe("Đã cọc");
+    expect(updated.updatedAt).toBe(UPDATED_AT);
+  });
+
+  it("updates print tracking status with markPrinted", () => {
+    const invoice = Invoice.createDraft({
+      id: INVOICE_ID,
+      invoiceNumber: 1,
+      createdAt: CREATED_AT,
+    });
+
+    expect(invoice.isPrinted).toBe(false);
+    expect(invoice.printedAt).toBeNull();
+
+    const printed = invoice.markPrinted(COMPLETED_AT);
+    expect(printed.isPrinted).toBe(true);
+    expect(printed.printedAt).toBe(COMPLETED_AT);
+    expect(printed.updatedAt).toBe(COMPLETED_AT);
+  });
 });

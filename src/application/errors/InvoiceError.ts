@@ -5,7 +5,8 @@ export type InvoiceRepositoryOperation =
   | "complete"
   | "overwrite_completed"
   | "list"
-  | "delete_draft";
+  | "delete_draft"
+  | "mark_printed";
 
 export interface InvoiceValidationFailure {
   readonly code: "validation";

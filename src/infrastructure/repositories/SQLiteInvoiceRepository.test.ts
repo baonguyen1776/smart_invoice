@@ -247,3 +247,43 @@ it("round-trips persisted discount basis points and net totals through the comma
   expect(restored.ok && restored.value?.items[0].discountAmount).toBe(2500);
   expect(restored.ok && restored.value?.total).toBe(17500);
 });
+
+it("round-trips customer metadata through the command DTO", async () => {
+  const invoice = makeDraft().withCustomer({
+    name: "Khách VIP Test",
+    phone: "0912345678",
+    address: "Hà Nội",
+    note: "Giao gấp",
+  });
+  const invoker = vi.fn<CommandInvoker>().mockResolvedValue(undefined);
+  const repository = new SQLiteInvoiceRepository(invoker);
+
+  expect((await repository.saveDraft(invoice)).ok).toBe(true);
+  const record = invoker.mock.calls[0][1]?.invoice;
+  expect(record).toMatchObject({
+    customerName: "Khách VIP Test",
+    customerPhone: "0912345678",
+    customerAddress: "Hà Nội",
+    customerNote: "Giao gấp",
+    isPrinted: false,
+  });
+
+  invoker.mockResolvedValue(record);
+  const restored = await repository.findById(INVOICE_ID);
+  expect(restored.ok && restored.value?.customerName).toBe("Khách VIP Test");
+  expect(restored.ok && restored.value?.customerPhone).toBe("0912345678");
+  expect(restored.ok && restored.value?.customerAddress).toBe("Hà Nội");
+  expect(restored.ok && restored.value?.customerNote).toBe("Giao gấp");
+});
+
+it("invokes mark_invoice_printed with invoiceId and printedAt", async () => {
+  const invoker = vi.fn<CommandInvoker>().mockResolvedValue(undefined);
+  const repository = new SQLiteInvoiceRepository(invoker);
+
+  const result = await repository.markPrinted(INVOICE_ID, "2026-09-13T10:00:00.000Z");
+  expect(result.ok).toBe(true);
+  expect(invoker).toHaveBeenCalledWith("mark_invoice_printed", {
+    invoiceId: INVOICE_ID,
+    printedAt: "2026-09-13T10:00:00.000Z",
+  });
+});

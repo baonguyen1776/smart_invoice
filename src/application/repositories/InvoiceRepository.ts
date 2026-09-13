@@ -23,4 +23,8 @@ export interface InvoiceRepository {
   complete(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>>;
   overwriteCompleted(invoice: Invoice): Promise<Result<void, InvoicePersistenceFailure>>;
   deleteDraft(invoiceId: string): Promise<Result<void, InvoicePersistenceFailure>>;
+  markPrinted(
+    invoiceId: string,
+    printedAt: string,
+  ): Promise<Result<void, InvoicePersistenceFailure>>;
 }

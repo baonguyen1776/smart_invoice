@@ -10,6 +10,12 @@ export interface OverwriteCompletedInvoiceInput {
   readonly invoiceId: string;
   readonly confirmed: boolean;
   readonly items: readonly InvoiceItem[];
+  readonly customer?: {
+    readonly name?: string | null;
+    readonly phone?: string | null;
+    readonly address?: string | null;
+    readonly note?: string | null;
+  };
 }
 
 export class OverwriteCompletedInvoice {
@@ -25,7 +31,12 @@ export class OverwriteCompletedInvoice {
     if (!loaded.ok) return loaded;
 
     try {
-      const invoice = loaded.value.overwriteCompleted(input.items, this.clock.now());
+      const now = this.clock.now();
+      let invoice = loaded.value;
+      if (input.customer) {
+        invoice = invoice.withCustomer(input.customer, now);
+      }
+      invoice = invoice.overwriteCompleted(input.items, now);
       const persisted = await this.repository.overwriteCompleted(invoice);
       return persisted.ok ? ok(invoice) : persisted;
     } catch (error) {

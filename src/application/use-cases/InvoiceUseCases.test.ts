@@ -4,6 +4,7 @@ import type { IdGenerator } from "../ports/IdGenerator";
 import { ApplyInvoiceItemChange } from "./ApplyInvoiceItemChange";
 import { CompleteInvoice } from "./CompleteInvoice";
 import { CreateInvoiceDraft } from "./CreateInvoiceDraft";
+import { MarkInvoicePrinted } from "./MarkInvoicePrinted";
 import { OverwriteCompletedInvoice } from "./OverwriteCompletedInvoice";
 import { RestoreInvoiceDraft } from "./RestoreInvoiceDraft";
 import { InMemoryInvoiceRepository } from "../../test/doubles/InMemoryInvoiceRepository";
@@ -271,4 +272,19 @@ it("persists line-item note additions and updates via ApplyInvoiceItemChange", a
     },
   });
   expect(clearNote.ok && clearNote.value.items[0].note).toBeNull();
+});
+
+it("marks an invoice as printed with a timestamp", async () => {
+  const repository = new InMemoryInvoiceRepository([draft(true)]);
+  const useCase = new MarkInvoicePrinted(repository);
+
+  const result = await useCase.execute({
+    invoiceId: INVOICE_ID,
+    printedAt: "2026-09-10T05:00:00.000Z",
+  });
+
+  expect(result.ok).toBe(true);
+  const invoice = await repository.findById(INVOICE_ID);
+  expect(invoice.ok && invoice.value?.isPrinted).toBe(true);
+  expect(invoice.ok && invoice.value?.printedAt).toBe("2026-09-10T05:00:00.000Z");
 });
