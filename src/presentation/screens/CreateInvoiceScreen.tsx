@@ -4,6 +4,7 @@ import type {
   ApplyInvoiceItemChange,
   InvoiceItemChange,
 } from "../../application/use-cases/ApplyInvoiceItemChange";
+import type { UpdateInvoiceOldDebt } from "../../application/use-cases/UpdateInvoiceOldDebt";
 import type { UpdateInvoiceCustomer } from "../../application/use-cases/UpdateInvoiceCustomer";
 import type { CompleteInvoice } from "../../application/use-cases/CompleteInvoice";
 import type { CreateInvoiceDraft } from "../../application/use-cases/CreateInvoiceDraft";
@@ -21,6 +22,7 @@ import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewM
 import "./CreateInvoiceScreen.css";
 
 export interface InvoiceScreenActions {
+  readonly updateInvoiceOldDebt?: Pick<UpdateInvoiceOldDebt, "execute">;
   readonly updateInvoiceCustomer?: Pick<UpdateInvoiceCustomer, "execute">;
   readonly createInvoiceDraft: Pick<CreateInvoiceDraft, "execute">;
   readonly restoreInvoiceDraft?: Pick<RestoreInvoiceDraft, "execute">;
@@ -125,6 +127,13 @@ function InvoiceEditor({
   const selectionPending = useRef(false);
   const [hasPendingInput, setHasPendingInput] = useState(false);
   const [gridReset, setGridReset] = useState(0);
+  const [oldDebtInput, setOldDebtInput] = useState(
+    editingInvoice?.oldDebt ? String(editingInvoice.oldDebt) : "",
+  );
+  const [isDebtFocused, setIsDebtFocused] = useState(false);
+  const [oldDebtError, setOldDebtError] = useState<string | null>(null);
+  const [oldDebtDirty, setOldDebtDirty] = useState(false);
+  const oldDebtRevision = useRef(0);
   const [customerDirty, setCustomerDirty] = useState(false);
   const customerRevision = useRef(0);
   const activeInvoice = useRef(invoice);
@@ -182,6 +191,9 @@ function InvoiceEditor({
       address: legacy?.address ?? entity.customerAddress,
       note: legacy?.note ?? entity.customerNote ?? "",
     };
+    setOldDebtInput(entity.oldDebt ? String(entity.oldDebt) : "");
+    setOldDebtDirty(false);
+    setOldDebtError(null);
     setCustomerName(customer.name);
     setCustomerPhone(customer.phone);
     setCustomerNote(customer.note);
@@ -290,7 +302,7 @@ function InvoiceEditor({
   }, [isLoading]);
 
   useEffect(() => {
-    if (lastRemoved) undoButtonRef.current?.focus();
+    if (lastRemoved) undoButtonRef.current?.focus({ preventScroll: true });
   }, [lastRemoved]);
 
   function handleCustomerChange(field: "name" | "phone" | "note", value: string) {
@@ -325,6 +337,17 @@ function InvoiceEditor({
     }
   }
 
+  const preservePendingOldDebt = useCallback((saved: Invoice, oldDebt: number): Invoice => {
+    try {
+      return saved.withOldDebt(oldDebt, saved.updatedAt);
+    } catch {
+      // A queued item save may change the allowed combined total after debt was
+      // entered. Keep the committed items and mark that debt input for correction.
+      setOldDebtError("Nợ cũ và tổng tiền vượt giới hạn hợp lệ. Hãy kiểm tra lại.");
+      return saved;
+    }
+  }, []);
+
   function saveCustomer() {
     const current = activeInvoice.current;
     if (!current || current.status !== "draft" || !customerDirty || !actions.updateInvoiceCustomer)
@@ -349,7 +372,7 @@ function InvoiceEditor({
           return;
         }
         if (customerRevision.current === revision) {
-          updateInvoice(result.value);
+          updateInvoice(preservePendingOldDebt(result.value, activeInvoice.current.oldDebt));
           setCustomerDirty(false);
           try {
             localStorage.removeItem(`smart_invoice_customer_${current.id}`);
@@ -369,9 +392,67 @@ function InvoiceEditor({
     changeQueue.current = operation;
   }
 
+  function handleOldDebtChange(value: string) {
+    setOldDebtInput(value);
+    oldDebtRevision.current += 1;
+    const current = activeInvoice.current;
+    if (!current) return;
+    if (current.status === "completed") setHasStagedChanges(true);
+    try {
+      if (value && !/^\d+$/.test(value)) throw new Error();
+      updateInvoice(current.withOldDebt(Number(value || 0), current.updatedAt));
+      setOldDebtError(null);
+      setOldDebtDirty(true);
+    } catch {
+      setOldDebtError("Nhập số nguyên VND từ 0 trở lên, trong giới hạn tổng tiền hợp lệ.");
+    }
+  }
+
+  function saveOldDebt() {
+    const current = activeInvoice.current;
+    if (
+      !current ||
+      current.status !== "draft" ||
+      !oldDebtDirty ||
+      oldDebtError ||
+      !actions.updateInvoiceOldDebt
+    )
+      return;
+    const revision = oldDebtRevision.current;
+    setPendingChanges((count) => count + 1);
+    const operation = changeQueue.current.then(async () => {
+      try {
+        const result = await actions.updateInvoiceOldDebt!.execute({
+          invoiceId: current.id,
+          oldDebt: current.oldDebt,
+        });
+        if (!isMounted.current || activeInvoice.current?.id !== current.id) return;
+        if (!result.ok) {
+          setErrorMessage("Chưa lưu được nợ cũ. Vui lòng thử lại.");
+          return;
+        }
+        // Other editor input may have changed while this save was queued.
+        if (oldDebtRevision.current === revision) setOldDebtDirty(false);
+        setErrorMessage(null);
+        void refreshInvoices();
+      } catch {
+        if (isMounted.current && activeInvoice.current?.id === current.id)
+          setErrorMessage("Chưa lưu được nợ cũ. Vui lòng thử lại.");
+      } finally {
+        if (isMounted.current) setPendingChanges((count) => count - 1);
+      }
+    });
+    changeQueue.current = operation;
+  }
+
   function handleSelectInvoice(selected: Invoice) {
     if (selected.id === invoice?.id) {
       setIsDraftsModalOpen(false);
+      return;
+    }
+    if (oldDebtError || (oldDebtDirty && invoice?.status === "draft")) {
+      saveOldDebt();
+      setNoticeMessage("Cần lưu nợ cũ hợp lệ trước khi chuyển hóa đơn.");
       return;
     }
     if (isSaving || isCompleting || (customerDirty && invoice?.status === "draft")) {
@@ -397,6 +478,13 @@ function InvoiceEditor({
 
   async function handleCreateNewDraft() {
     if (isSaving || isLoading || isCompleting) return;
+    if (
+      activeInvoice.current &&
+      (oldDebtError || (oldDebtDirty && activeInvoice.current.status === "draft"))
+    ) {
+      saveOldDebt();
+      return;
+    }
     if (customerDirty && activeInvoice.current?.status === "draft") {
       saveCustomer();
       return;
@@ -475,7 +563,8 @@ function InvoiceEditor({
       invoice.items.length === 0 ||
       isSaving ||
       isCompleting ||
-      hasPendingInput
+      hasPendingInput ||
+      Boolean(oldDebtError)
     )
       return;
     const unsaved = document.querySelector<HTMLInputElement>(
@@ -491,6 +580,7 @@ function InvoiceEditor({
       if (actions.completeInvoice) {
         const result = await actions.completeInvoice.execute({
           invoiceId: invoice.id,
+          oldDebt: invoice.oldDebt,
           customer: {
             name: customerName,
             phone: customerPhone,
@@ -502,6 +592,7 @@ function InvoiceEditor({
         if (result.ok) {
           updateInvoice(result.value);
           setCustomerDirty(false);
+          setOldDebtDirty(false);
           setOriginalCompletedInvoice(result.value);
           setHasStagedChanges(false);
           try {
@@ -545,7 +636,8 @@ function InvoiceEditor({
       invoice.status !== "completed" ||
       !actions.overwriteCompletedInvoice ||
       isSaving ||
-      hasPendingInput
+      hasPendingInput ||
+      Boolean(oldDebtError)
     )
       return;
     setIsOverwriting(true);
@@ -554,6 +646,7 @@ function InvoiceEditor({
       const result = await actions.overwriteCompletedInvoice.execute({
         invoiceId: invoice.id,
         confirmed: true,
+        oldDebt: invoice.oldDebt,
         items: invoice.items,
         customer: {
           name: customerName,
@@ -571,6 +664,7 @@ function InvoiceEditor({
         } catch {
           /* Optional legacy cache. */
         }
+        setOldDebtDirty(false);
         setOriginalCompletedInvoice(result.value);
         setHasStagedChanges(false);
         setIsConfirmOverwriteOpen(false);
@@ -629,7 +723,7 @@ function InvoiceEditor({
           if (!isMounted.current || activeInvoice.current?.id !== invoice.id) return null;
           if (result.ok) {
             const current = activeInvoice.current;
-            const next = result.value.withCustomer(
+            const saved = result.value.withCustomer(
               {
                 name: current.customerName,
                 phone: current.customerPhone,
@@ -638,6 +732,7 @@ function InvoiceEditor({
               },
               result.value.updatedAt,
             );
+            const next = preservePendingOldDebt(saved, current.oldDebt);
             activeInvoice.current = next;
             setInvoice(next);
             setErrorMessage(null);
@@ -660,7 +755,7 @@ function InvoiceEditor({
       changeQueue.current = operation;
       return operation;
     },
-    [actions.applyInvoiceItemChange],
+    [actions.applyInvoiceItemChange, preservePendingOldDebt],
   );
 
   async function handleRemoveItem(itemId: string) {
@@ -670,7 +765,9 @@ function InvoiceEditor({
     if (!failure && isMounted.current && activeInvoice.current?.id === item.invoiceId) {
       setLastRemoved(item);
       setNoticeMessage(null);
-      document.querySelector<HTMLInputElement>('[data-product-input="true"]')?.focus();
+      document
+        .querySelector<HTMLInputElement>('[data-product-input="true"]')
+        ?.focus({ preventScroll: true });
     }
     return failure;
   }
@@ -702,7 +799,9 @@ function InvoiceEditor({
     if (!error) {
       setLastRemoved(null);
       setNoticeMessage(`Đã khôi phục dòng “${item.productName}”`);
-      document.querySelector<HTMLInputElement>('[data-product-input="true"]')?.focus();
+      document
+        .querySelector<HTMLInputElement>('[data-product-input="true"]')
+        ?.focus({ preventScroll: true });
     }
   }, [applyChange, isSaving, lastRemoved]);
 
@@ -794,26 +893,6 @@ function InvoiceEditor({
             </span>
           )}
         </div>
-        {invoice?.status === "completed" && hasStagedChanges && (
-          <div className="notice warning notice-staged-changes" role="alert">
-            <InvoiceIcon name="alert" size={16} />
-            <div className="notice-staged-content">
-              <strong>Hóa đơn đã chốt đang có thay đổi tạm thời.</strong>
-              <span>
-                Các chỉnh sửa chưa được lưu vào cơ sở dữ liệu cho đến khi bạn nhấn &quot;Lưu ghi
-                đè&quot;.
-              </span>
-            </div>
-            <button
-              type="button"
-              className="secondary-button btn-discard-banner"
-              onClick={handleDiscardChanges}
-              disabled={isSaving}
-            >
-              Hủy thay đổi
-            </button>
-          </div>
-        )}
         {errorMessage && (
           <div className="notice error" role="alert">
             {errorMessage}
@@ -932,6 +1011,59 @@ function InvoiceEditor({
           isDraftsOpen={isDraftsModalOpen}
         />
         <footer className="invoice-footer-bar">
+          <div className="invoice-old-debt-field">
+            <label htmlFor="invoice-old-debt">Nợ cũ (₫)</label>
+            <input
+              id="invoice-old-debt"
+              className="invoice-customer-input"
+              type={isDebtFocused ? "number" : "text"}
+              inputMode="numeric"
+              min={0}
+              max={Number.MAX_SAFE_INTEGER}
+              step={1}
+              disabled={!invoice || isCompleting || isOverwriting}
+              value={
+                isDebtFocused || oldDebtError
+                  ? oldDebtInput
+                  : Number(oldDebtInput || 0) === 0
+                    ? ""
+                    : Number(oldDebtInput).toLocaleString("vi-VN")
+              }
+              aria-invalid={Boolean(oldDebtError)}
+              aria-describedby={oldDebtError ? "old-debt-error" : undefined}
+              onFocus={() => setIsDebtFocused(true)}
+              onChange={(event) => handleOldDebtChange(event.target.value)}
+              onBlur={() => {
+                setIsDebtFocused(false);
+                if (!oldDebtError && Number(oldDebtInput || 0) === 0) setOldDebtInput("");
+                saveOldDebt();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+                if (event.key === "Escape") {
+                  setOldDebtInput(invoice?.oldDebt ? String(invoice.oldDebt) : "");
+                  setOldDebtError(null);
+                }
+              }}
+            />
+            {oldDebtError && (
+              <small id="old-debt-error" role="alert">
+                {oldDebtError}
+              </small>
+            )}
+            {oldDebtDirty &&
+              invoice?.status === "draft" &&
+              !isSaving &&
+              !oldDebtError &&
+              actions.updateInvoiceOldDebt && (
+                <button type="button" onClick={saveOldDebt}>
+                  Lưu nợ cũ
+                </button>
+              )}
+          </div>
           {invoice?.status === "completed" ? (
             hasStagedChanges ? (
               <div className="invoice-action-group completed-edit-actions">
@@ -946,7 +1078,9 @@ function InvoiceEditor({
                 <button
                   type="button"
                   className="primary-button btn-save-overwrite"
-                  disabled={isSaving || !invoice.items.length || hasPendingInput}
+                  disabled={
+                    isSaving || !invoice.items.length || hasPendingInput || Boolean(oldDebtError)
+                  }
                   onClick={() => setIsConfirmOverwriteOpen(true)}
                 >
                   <InvoiceIcon name="check" size={16} />
@@ -986,7 +1120,8 @@ function InvoiceEditor({
                   !invoice?.items.length ||
                   isSaving ||
                   isCompleting ||
-                  hasPendingInput
+                  hasPendingInput ||
+                  Boolean(oldDebtError)
                 }
                 aria-describedby={
                   !actions.completeInvoice && !onCompleteInvoice

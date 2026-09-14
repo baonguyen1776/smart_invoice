@@ -603,6 +603,7 @@ Required constraints and indexes:
 | `invoice_number` | `INTEGER NOT NULL UNIQUE` | positive, user-facing identity |
 | `status` | `TEXT NOT NULL DEFAULT 'draft'` | `draft` or `completed` only |
 | `total` | `INTEGER NOT NULL DEFAULT 0` | sum of item payments after line discounts, integer VND |
+| `old_debt` | `INTEGER NOT NULL DEFAULT 0` (migration `0008`) | nonnegative safe-integer VND; independent of item totals |
 | `created_at` | `TEXT NOT NULL` | immutable UTC timestamp |
 | `updated_at` | `TEXT NOT NULL` | UTC timestamp updated on mutation |
 | `completed_at` | nullable `TEXT` | null for draft; set on first completion |
@@ -634,6 +635,15 @@ State rules:
   `id`, `invoice_number`, `created_at`, and the original `completed_at`;
   `status` remains `completed` and `updated_at` changes.
 - There is no audit/version table.
+
+Issue #49 adds persisted invoice old debt. `Invoice.total` remains the net item
+sum; `Invoice.finalTotal` derives `total + oldDebt`. Domain validation and SQLite
+constraints reject negative/fractional/unsafe debt and unsafe combined totals.
+Migration `0008` preserves existing totals and defaults historical debt to zero.
+The debt use case uses the existing per-repository draft edit queue. Completion
+and confirmed overwrite write debt, items, customer fields, and total atomically.
+Receipt pagination belongs to Presentation and uses rendered heights, including
+wrapped text, from the same CSS geometry as the A5 print output.
 
 ### 19.6 Invoice Items
 

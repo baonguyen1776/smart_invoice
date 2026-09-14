@@ -139,7 +139,9 @@
 /* ─── Bottom Action Bar (Complete Button) ────────── */
 .invoice-footer-bar {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
   justify-content: flex-end;
   margin-top: 16px;
   padding: 8px 0;
@@ -727,44 +729,6 @@
   color: #ef4444;
 }
 
-/* ─── Staged Changes Banner ────────────────────────────── */
-.notice.warning.notice-staged-changes {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
-  padding: 10px 16px;
-  border-radius: 10px;
-  margin-bottom: 12px;
-}
-
-.notice-staged-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  font-size: 13px;
-}
-
-.notice-staged-content strong {
-  color: #78350f;
-  font-weight: 600;
-}
-
-.notice-staged-content span {
-  color: #92400e;
-  font-size: 12px;
-}
-
-.btn-discard-banner {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 /* ─── Completed Invoice Footer Actions ─────────────────── */
 .completed-edit-actions,
 .completed-view-actions {
@@ -985,5 +949,49 @@
   .invoice-frame *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+.invoice-old-debt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 240px;
+  font-size: 13px;
+}
+.invoice-old-debt-field input {
+  text-align: right;
+}
+.invoice-old-debt-field small {
+  color: var(--danger, #b91c1c);
+}
+
+/* Keep the amount input and primary action visible on the desktop workspace. */
+@media (min-width: 1100px) and (min-height: 700px) {
+  .invoice-frame .workspace {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  .invoice-frame .workspace > * {
+    flex-shrink: 0;
+  }
+  .invoice-frame .invoice-grid-card {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+  .invoice-frame .invoice-footer-bar {
+    margin-top: auto;
+    padding-top: 16px;
+  }
+  .invoice-frame .invoice-table-toolbar {
+    flex-shrink: 0;
+  }
+  .invoice-frame .invoice-grid-scroll {
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 auto;
   }
 }

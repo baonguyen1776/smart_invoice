@@ -116,7 +116,7 @@ function item(invoiceId: string, quantity = 1, unitPrice = 10000) {
     createdAt: NOW,
   });
 }
-it("receipt handles page sums larger than safe integers without losing precision", () => {
+it("receipt prints only the exact invoice total when intermediate page sums exceed safe integers", () => {
   const id = crypto.randomUUID();
   const max = Number.MAX_SAFE_INTEGER;
   const lines = Array.from({ length: 29 }, () => item(id, 1, 0));
@@ -133,7 +133,10 @@ it("receipt handles page sums larger than safe integers without losing precision
   );
   expect(screen.queryByRole("dialog")).toBeNull();
   view.rerender(<InvoiceReceiptPreviewModal invoice={invoice} isOpen onClose={() => {}} />);
-  expect(screen.getAllByText((BigInt(max) * 2n).toLocaleString("vi-VN")).length).toBeGreaterThan(0);
+  expect(document.querySelector(".td-total-payment")).toHaveTextContent(
+    max.toLocaleString("vi-VN"),
+  );
+  expect(document.querySelectorAll(".thu-ba-total-row")).toHaveLength(1);
 });
 it("receipt displays negative return discounts", () => {
   const id = crypto.randomUUID();
@@ -141,7 +144,7 @@ it("receipt displays negative return discounts", () => {
   const invoice = Invoice.createDraft({ id, invoiceNumber: 1, createdAt: NOW })
     .replaceDraftItems([line], NOW)
     .complete(NOW);
-  const { container } = render(
+  const { baseElement: container } = render(
     <InvoiceReceiptPreviewModal invoice={invoice} isOpen onClose={() => {}} />,
   );
   expect(line.discountAmount).toBe(-1000);

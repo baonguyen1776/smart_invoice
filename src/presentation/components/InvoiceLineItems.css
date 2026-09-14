@@ -90,6 +90,7 @@
 
 /* ─── Scroll Container & Table Base ─────────────────────── */
 .invoice-grid-scroll {
+  overflow-anchor: none;
   max-height: min(65vh, 680px);
   overflow: auto;
   overscroll-behavior: contain;

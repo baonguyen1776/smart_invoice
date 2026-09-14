@@ -229,3 +229,21 @@ cargo build --manifest-path src-tauri/Cargo.toml --release --example native_smok
 node scripts/native-smoke.mjs
 git diff --check
 ```
+
+
+## #49 — Create Invoice and print preview
+
+[Implementation, changed files, and verification](issue49.md). All required
+frontend and Rust checks passed on September 14, 2026. Browser/PDF checks cover
+9 and 14 items with debt, wrapped notes, continuation sheets, add-only scrolling,
+and the desktop footer at 1400×1000 and 1366×768. Select one-sided printing in the
+printer dialog; a physical printer was not exercised.
+
+
+### #49 user review — September 15, 2026
+
+The detail card now fits its content, zero debt is blank, and the staged-change
+banner is removed. Continuation sheets omit column headers too. Preview optimizes
+page count with the shop retained on ties; **In / Không in** then allows an
+unconditional user override. Updated browser/PDF evidence and all modified files
+are recorded in [Issue #49 verification](issue49.md).

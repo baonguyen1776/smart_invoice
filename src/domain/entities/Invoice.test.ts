@@ -209,3 +209,34 @@ describe("Invoice", () => {
     expect(printed.updatedAt).toBe(COMPLETED_AT);
   });
 });
+
+describe("invoice old debt", () => {
+  const draft = () =>
+    Invoice.createDraft({ id: INVOICE_ID, invoiceNumber: 1, createdAt: CREATED_AT });
+  it("defaults to zero and adds old debt after item discounts without changing the item total", () => {
+    expect(draft().oldDebt).toBe(0);
+    const invoice = draft()
+      .replaceDraftItems([item().update({ discountBasisPoints: 1000 })], UPDATED_AT)
+      .withOldDebt(5000, UPDATED_AT);
+    expect(invoice.total).toBe(21600);
+    expect(invoice.finalTotal).toBe(26600);
+    expect(Invoice.rehydrate(invoice.toState()).oldDebt).toBe(5000);
+    expect(invoice.complete(COMPLETED_AT).oldDebt).toBe(5000);
+    expect(invoice.withOldDebt(0, UPDATED_AT).finalTotal).toBe(21600);
+  });
+  it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid old debt %s",
+    (value) => {
+      expect(() => draft().withOldDebt(value, UPDATED_AT)).toThrow(InvoiceValidationError);
+    },
+  );
+  it("rejects unsafe combined totals and supports net credit after returns", () => {
+    const invoice = draft().replaceDraftItems([item()], UPDATED_AT);
+    expect(() => invoice.withOldDebt(Number.MAX_SAFE_INTEGER, UPDATED_AT)).toThrow(/Final total/);
+    expect(
+      draft()
+        .replaceDraftItems([item(ITEM_ID, 1000, -10)], UPDATED_AT)
+        .withOldDebt(2000, UPDATED_AT).finalTotal,
+    ).toBe(-8000);
+  });
+});

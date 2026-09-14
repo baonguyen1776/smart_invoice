@@ -171,3 +171,40 @@ right summary keeps its layout and displays the saved invoice total after CK.
   errors leave the prior status unchanged. A failed status write can be retried
   without printing another copy. This temporary confirmation flow does not
   replace the planned hardware spike and PrinterService adapter.
+
+## Create Invoice and A5 receipt optimization (Issue #49)
+
+- Reveal a newly appended grid row inside the table scroll container without
+  moving keyboard focus. Editing, deleting, filtering, and sorting retain the
+  scroll position (subject to the browser clamping when the table shrinks).
+- Optional old debt defaults to zero and accepts nonnegative safe-integer VND.
+  It appears at the bottom right, immediately above Complete. The field uses
+  numeric editing and Vietnamese thousands separators when blurred.
+- Draft debt saves on blur through the same serialized edit queue as items and
+  customer fields. Failed writes retain input and provide retry. Completion
+  includes the current valid debt; completed edits use confirmed overwrite and
+  Discard Changes restores the saved debt.
+- A5 landscape uses the same physical dimensions, padding, and fonts in preview
+  and print. The first sheet has three shop lines, the title, two customer lines,
+  and the nine-column table. Fourteen items is the default first-sheet maximum.
+  There are no blank filler rows or compact fonts.
+- The initial preview compares the rendered layouts with and without the shop
+  header and chooses the fewest sheets. A tie retains the shop header, including
+  when debt still needs a second sheet after cutting it. The selector displays
+  the chosen **In / Không in** state. A subsequent user selection is authoritative:
+  **In** keeps the shop even if it adds a sheet; **Không in** omits it. Omitting the
+  shop may use the reclaimed space for more than 14 items on the first sheet.
+- Continuation sheets begin directly with remaining item rows: no shop, invoice
+  title, customer information, or repeated column header. Only the sheet with
+  the last item has totals. The regular `Tổng Cộng` retains gross, discount, and
+  net item sums. Positive debt adds `Cũ`, then `Tổng cộng` (net items plus debt).
+  Zero debt omits those two extra rows.
+- September 15 review: empty/short detail tables take only their content height;
+  the amount input and Complete remain at the bottom of the desktop viewport.
+  Zero debt displays as an empty field and still persists as zero. Remove the
+  completed-invoice staged-change banner; the footer retains Discard Changes,
+  Save Overwrite, and the existing confirmation workflow.
+- Print each generated page on a separate sheet, selecting **one-sided** in the
+  OS/browser dialog. Browser printing cannot set the printer's duplex setting;
+  no artificial blank PDF pages are inserted. Hardware-adapter work remains
+  governed by the existing printer spike.

@@ -1,8 +1,9 @@
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Invoice } from "../../domain/entities/Invoice";
-import type { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import { sumInvoiceAmountsExact } from "../../domain/rules/CalculateInvoiceAmounts";
 import { formatInvoiceAmount } from "../formatters/FormatInvoiceAmount";
+import { useReceiptPagination } from "../printing/useReceiptPagination";
 import { InvoiceIcon } from "./InvoiceIcon";
 import "./InvoiceReceiptPreviewModal.css";
 
@@ -24,26 +25,12 @@ export interface InvoiceReceiptPreviewModalProps {
   readonly onEdit?: () => void;
 }
 
-const SINGLE_PAGE_STANDARD_ROWS = 14;
-const COMPACT_MODE_LIMIT = 16;
-const MULTI_PAGE_ITEMS_PER_PAGE = 14;
-
-interface InvoiceReceiptPage {
-  readonly pageNumber: number;
-  readonly totalPages: number;
-  readonly items: readonly InvoiceItem[];
-  readonly startIndex: number;
-  readonly emptyRowsCount: number;
-  readonly isFirstPage: boolean;
-  readonly isLastPage: boolean;
-  readonly pageSubtotal: bigint;
-  readonly pageDiscount: bigint;
-  readonly pagePayment: bigint;
-}
-
 export function InvoiceReceiptPreviewModal(props: InvoiceReceiptPreviewModalProps) {
   if (!props.isOpen || !props.invoice) return null;
-  return <ReceiptPreviewContent key={props.invoice.id} {...props} invoice={props.invoice} />;
+  return createPortal(
+    <ReceiptPreviewContent key={props.invoice.id} {...props} invoice={props.invoice} />,
+    document.body,
+  );
 }
 
 function ReceiptPreviewContent({
@@ -60,7 +47,21 @@ function ReceiptPreviewContent({
   const [isMarkingPrinted, setIsMarkingPrinted] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
   const printBusy = useRef(false);
-  const [includeStoreHeader, setIncludeStoreHeader] = useState<boolean>(true);
+  const [storeHeaderOverride, setStoreHeaderOverride] = useState<boolean | undefined>(undefined);
+
+  const {
+    paperRef,
+    pages: pageRanges,
+    hasOversizedContent,
+  } = useReceiptPagination(invoice.items.length, invoice.oldDebt > 0, storeHeaderOverride);
+  const pages = pageRanges.map((page, index) => ({
+    ...page,
+    pageNumber: index + 1,
+    totalPages: pageRanges.length,
+    isFirstPage: index === 0,
+    isLastPage: index === pageRanges.length - 1,
+    items: invoice.items.slice(page.startIndex, page.endIndex),
+  }));
 
   const totals = useMemo(() => {
     if (!invoice || invoice.items.length === 0) {
@@ -70,7 +71,7 @@ function ReceiptPreviewContent({
   }, [invoice]);
 
   const handlePrint = useCallback(() => {
-    if (printBusy.current || awaitingPrintConfirmation) return;
+    if (printBusy.current || awaitingPrintConfirmation || hasOversizedContent) return;
     printBusy.current = true;
     setPrintError(null);
     try {
@@ -82,7 +83,7 @@ function ReceiptPreviewContent({
     } finally {
       printBusy.current = false;
     }
-  }, [onPrint, onConfirmPrinted, awaitingPrintConfirmation]);
+  }, [onPrint, onConfirmPrinted, awaitingPrintConfirmation, hasOversizedContent]);
 
   async function confirmPrinted() {
     if (!onConfirmPrinted || printBusy.current) return;
@@ -129,65 +130,6 @@ function ReceiptPreviewContent({
     };
   }, [isOpen, onClose, onNewDraft, handlePrint]);
 
-  const pages = useMemo<readonly InvoiceReceiptPage[]>(() => {
-    if (!isOpen || !invoice) return [];
-    const allItems = invoice.items;
-    const totalCount = allItems.length;
-
-    // Single page mode (<= 16 items)
-    if (totalCount <= COMPACT_MODE_LIMIT) {
-      const emptyCount = Math.max(0, SINGLE_PAGE_STANDARD_ROWS - totalCount);
-      return [
-        {
-          pageNumber: 1,
-          totalPages: 1,
-          items: allItems,
-          startIndex: 0,
-          emptyRowsCount: emptyCount,
-          isFirstPage: true,
-          isLastPage: true,
-          pageSubtotal: totals.subtotal,
-          pageDiscount: totals.discountAmount,
-          pagePayment: totals.payment,
-        },
-      ];
-    }
-
-    // Multi-page mode (> 16 items) -> auto-split into pages
-    const totalPages = Math.ceil(totalCount / MULTI_PAGE_ITEMS_PER_PAGE);
-    const result: InvoiceReceiptPage[] = [];
-
-    for (let p = 0; p < totalPages; p++) {
-      const pageNumber = p + 1;
-      const isFirst = p === 0;
-      const isLast = p === totalPages - 1;
-      const start = p * MULTI_PAGE_ITEMS_PER_PAGE;
-      const pageItems = allItems.slice(start, start + MULTI_PAGE_ITEMS_PER_PAGE);
-      const emptyCount = Math.max(0, MULTI_PAGE_ITEMS_PER_PAGE - pageItems.length);
-
-      const pageTotals = sumInvoiceAmountsExact(pageItems);
-
-      result.push({
-        pageNumber,
-        totalPages,
-        items: pageItems,
-        startIndex: start,
-        emptyRowsCount: emptyCount,
-        isFirstPage: isFirst,
-        isLastPage: isLast,
-        pageSubtotal: isLast ? totals.subtotal : pageTotals.subtotal,
-        pageDiscount: isLast ? totals.discountAmount : pageTotals.discountAmount,
-        pagePayment: isLast ? totals.payment : pageTotals.payment,
-      });
-    }
-
-    return result;
-  }, [invoice, totals, isOpen]);
-
-  if (!isOpen || !invoice) {
-    return null;
-  }
-
   const resolvedCustomerName = customer?.name ?? invoice.customerName ?? "";
   const resolvedCustomerPhone = customer?.phone ?? invoice.customerPhone ?? "";
   const resolvedCustomerAddress =
@@ -227,8 +169,8 @@ function ReceiptPreviewContent({
               <label htmlFor="receipt-store-header-select">In tin cửa hàng:</label>
               <select
                 id="receipt-store-header-select"
-                value={includeStoreHeader ? "full" : "none"}
-                onChange={(e) => setIncludeStoreHeader(e.target.value === "full")}
+                value={pageRanges[0].showStoreHeader ? "full" : "none"}
+                onChange={(e) => setStoreHeaderOverride(e.target.value === "full")}
                 className="receipt-header-select"
               >
                 <option value="full">In</option>
@@ -260,7 +202,7 @@ function ReceiptPreviewContent({
               type="button"
               className="primary-button btn-receipt-print"
               onClick={handlePrint}
-              disabled={awaitingPrintConfirmation || isMarkingPrinted}
+              disabled={awaitingPrintConfirmation || isMarkingPrinted || hasOversizedContent}
               title="In hóa đơn (Enter)"
             >
               <InvoiceIcon name="receipt" size={15} />
@@ -310,63 +252,47 @@ function ReceiptPreviewContent({
             </button>
           </div>
         )}
-        <div className="receipt-paper-scroll">
+        {hasOversizedContent && (
+          <p className="no-print" role="alert">
+            Nội dung một dòng vượt khổ A5. Hãy rút ngắn tên, ghi chú hoặc địa chỉ trước khi in.
+          </p>
+        )}
+        <p className="receipt-paper-hint no-print">
+          A5 · In một mặt — chọn in một mặt trong hộp thoại máy in.
+        </p>
+        <div className="receipt-paper-scroll" ref={paperRef}>
           {pages.map((page) => {
-            const isCompact =
-              page.totalPages === 1 && page.items.length > SINGLE_PAGE_STANDARD_ROWS;
             return (
               <div
                 key={`receipt-page-${page.pageNumber}`}
-                className={`thu-ba-invoice-paper ${isCompact ? "compact-mode" : ""} ${
-                  !includeStoreHeader ? "no-store-header" : ""
-                }`}
+                className={`thu-ba-invoice-paper ${!page.showStoreHeader ? "no-store-header" : ""}`}
                 id={page.pageNumber === 1 ? "thu-ba-invoice-print-area" : undefined}
               >
-                {page.isFirstPage ? (
+                {page.isFirstPage && (
                   <div className="thu-ba-header">
-                    {includeStoreHeader && (
-                      <>
-                        <h2 className="store-name">THU BA</h2>
-                        <p className="store-address">
-                          Địa chỉ : 299 -đường 3/2 - Ô 1 - khu 2 - xã Chợ Gạo - Đồng Tháp
-                        </p>
-                        <p className="store-phone">SĐT : 0989,601,556 - 0984,831,636</p>
-                      </>
-                    )}
-                    <h1 className="invoice-title">
-                      HÓA ĐƠN
-                      {page.totalPages > 1 && (
-                        <span className="invoice-title-page-tag">
-                          (Trang {page.pageNumber}/{page.totalPages})
-                        </span>
-                      )}
-                    </h1>
-                  </div>
-                ) : (
-                  <div className="thu-ba-header thu-ba-header-subpage">
-                    <div className="subpage-header-row">
-                      {includeStoreHeader && <span className="subpage-store-name">THU BA</span>}
-                      <span className="subpage-invoice-title">HÓA ĐƠN (Tiếp theo)</span>
-                      <span className="subpage-page-tag">
-                        Trang {page.pageNumber}/{page.totalPages}
-                      </span>
-                    </div>
-                    {includeStoreHeader && (
+                    <div className="receipt-store-header" hidden={!page.showStoreHeader}>
+                      <h2 className="store-name">THU BA</h2>
+                      <p className="store-address">
+                        Địa chỉ : 299 -đường 3/2 - Ô 1 - khu 2 - xã Chợ Gạo - Đồng Tháp
+                      </p>
                       <p className="store-phone">SĐT : 0989,601,556 - 0984,831,636</p>
-                    )}
+                    </div>
+                    <h1 className="invoice-title">HÓA ĐƠN</h1>
                   </div>
                 )}
 
-                <div className="customer-info-section">
-                  <div className="customer-row">
-                    <span className="customer-row-label">Khách hàng:</span>
-                    <span className="customer-row-val">{resolvedCustomerName}</span>
+                {page.isFirstPage && (
+                  <div className="customer-info-section">
+                    <div className="customer-row">
+                      <span className="customer-row-label">Khách hàng:</span>
+                      <span className="customer-row-val">{resolvedCustomerName}</span>
+                    </div>
+                    <div className="customer-row">
+                      <span className="customer-row-label">Địa chỉ:</span>
+                      <span className="customer-row-val">{resolvedCustomerAddress}</span>
+                    </div>
                   </div>
-                  <div className="customer-row">
-                    <span className="customer-row-label">Địa chỉ:</span>
-                    <span className="customer-row-val">{resolvedCustomerAddress}</span>
-                  </div>
-                </div>
+                )}
 
                 <table className="thu-ba-table">
                   <colgroup>
@@ -380,19 +306,21 @@ function ReceiptPreviewContent({
                     <col className="col-ck-amount" style={{ width: "10%" }} />
                     <col className="col-payment" style={{ width: "13.5%" }} />
                   </colgroup>
-                  <thead>
-                    <tr>
-                      <th className="th-stt">Stt</th>
-                      <th className="th-name">Tên hàng hóa</th>
-                      <th className="th-unit">Đvt</th>
-                      <th className="th-qty">Số lượng</th>
-                      <th className="th-price">Đơn giá</th>
-                      <th className="th-subtotal">Thành tiền</th>
-                      <th className="th-ck">CK</th>
-                      <th className="th-ck-amount">Tiền CK</th>
-                      <th className="th-payment">Thanh toán</th>
-                    </tr>
-                  </thead>
+                  {page.isFirstPage && (
+                    <thead>
+                      <tr>
+                        <th className="th-stt">Stt</th>
+                        <th className="th-name">Tên hàng hóa</th>
+                        <th className="th-unit">Đvt</th>
+                        <th className="th-qty">Số lượng</th>
+                        <th className="th-price">Đơn giá</th>
+                        <th className="th-subtotal">Thành tiền</th>
+                        <th className="th-ck">CK</th>
+                        <th className="th-ck-amount">Tiền CK</th>
+                        <th className="th-payment">Thanh toán</th>
+                      </tr>
+                    </thead>
+                  )}
                   <tbody>
                     {page.items.map((item, index) => (
                       <tr key={item.id} className="item-row">
@@ -420,43 +348,44 @@ function ReceiptPreviewContent({
                         <td className="td-payment">{formatInvoiceAmount(item.payment)}</td>
                       </tr>
                     ))}
-
-                    {Array.from({ length: page.emptyRowsCount }).map((_, i) => {
-                      const rowNumber = page.startIndex + page.items.length + i + 1;
-                      return (
-                        <tr key={`empty-${rowNumber}`} className="empty-row">
-                          <td className="td-stt">{rowNumber}</td>
-                          <td className="td-name" />
-                          <td className="td-unit" />
-                          <td className="td-qty" />
-                          <td className="td-price" />
-                          <td className="td-subtotal">-</td>
-                          <td className="td-ck" />
-                          <td className="td-ck-amount">-</td>
-                          <td className="td-payment">-</td>
-                        </tr>
-                      );
-                    })}
                   </tbody>
-                  <tfoot>
-                    <tr className="thu-ba-total-row">
-                      <td colSpan={5} className="td-total-label">
-                        {page.isLastPage
-                          ? "Tổng Cộng"
-                          : `Cộng chuyển trang sau (Trang ${page.pageNumber}/${page.totalPages})`}
-                      </td>
-                      <td className="td-subtotal td-total-subtotal">
-                        {page.pageSubtotal !== 0n ? formatInvoiceAmount(page.pageSubtotal) : "-"}
-                      </td>
-                      <td className="td-ck-white" />
-                      <td className="td-ck-amount td-total-ck">
-                        {page.pageDiscount !== 0n ? formatInvoiceAmount(page.pageDiscount) : "-"}
-                      </td>
-                      <td className="td-payment td-total-payment">
-                        {page.pagePayment !== 0n ? formatInvoiceAmount(page.pagePayment) : "-"}
-                      </td>
-                    </tr>
-                  </tfoot>
+                  {page.isLastPage && (
+                    <tfoot>
+                      <tr className="thu-ba-total-row">
+                        <td colSpan={5} className="td-total-label">
+                          Tổng Cộng
+                        </td>
+                        <td className="td-subtotal td-total-subtotal">
+                          {totals.subtotal !== 0n ? formatInvoiceAmount(totals.subtotal) : "-"}
+                        </td>
+                        <td className="td-ck-white" />
+                        <td className="td-ck-amount td-total-ck">
+                          {totals.discountAmount !== 0n
+                            ? formatInvoiceAmount(totals.discountAmount)
+                            : "-"}
+                        </td>
+                        <td className="td-payment td-total-payment">
+                          {totals.payment !== 0n ? formatInvoiceAmount(totals.payment) : "-"}
+                        </td>
+                      </tr>
+                      {invoice.oldDebt > 0 && (
+                        <>
+                          <tr className="receipt-old-debt-row">
+                            <td colSpan={7} className="receipt-debt-spacer" />
+                            <td className="receipt-debt-label">Cũ</td>
+                            <td className="td-payment">{formatInvoiceAmount(invoice.oldDebt)}</td>
+                          </tr>
+                          <tr className="receipt-final-total-row">
+                            <td colSpan={7} className="receipt-debt-spacer" />
+                            <td className="receipt-debt-label">Tổng cộng</td>
+                            <td className="td-payment">
+                              {formatInvoiceAmount(invoice.finalTotal)}
+                            </td>
+                          </tr>
+                        </>
+                      )}
+                    </tfoot>
+                  )}
                 </table>
               </div>
             );
