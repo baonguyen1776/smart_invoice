@@ -521,7 +521,9 @@ Follow the field-level contract in `docs/architecture.md` §19:
   floating-point persisted money value.
 - Validate TypeScript monetary values with `Number.isSafeInteger` and the
   Domain range rules before persistence.
-- Invoice quantities are positive integers in the MVP.
+- Invoice quantities are non-zero safe integers; negative quantities represent
+  returns/deductions under UC-01 A3. Invoice amounts may be signed; prices remain
+  non-negative.
 - Store timestamps as canonical ISO-8601 UTC `TEXT` values.
 - Encode SQLite booleans as `0`/`1` and enforce the allowed values with a
   database constraint.

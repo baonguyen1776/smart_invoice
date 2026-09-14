@@ -6,6 +6,7 @@ import { validationFailure } from "./ProductUseCaseSupport";
 export interface SearchProductsInput {
   readonly query: string;
   readonly limit?: number;
+  readonly exactIdOnly?: boolean;
 }
 
 export class SearchProducts {
@@ -30,6 +31,6 @@ export class SearchProducts {
       return err(validationFailure("limit must be an integer between 1 and 50."));
     }
 
-    return ok(this.searchIndex.search(input.query, limit));
+    return ok(this.searchIndex.search(input.query, limit, input.exactIdOnly));
   }
 }

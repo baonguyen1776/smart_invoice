@@ -28,6 +28,7 @@ export function App({
   );
   const [productQueryPrefill, setProductQueryPrefill] = useState<string | undefined>(undefined);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [editingSession, setEditingSession] = useState(0);
 
   function handleNavigate(screen: AppScreen) {
     setCurrentScreen(screen);
@@ -43,6 +44,7 @@ export function App({
 
   function handleSelectInvoiceForEdit(inv: Invoice) {
     setEditingInvoice(inv);
+    setEditingSession((session) => session + 1);
     setCurrentScreen("invoice");
   }
 
@@ -60,6 +62,7 @@ export function App({
       {invoiceActions && (
         <div style={{ display: currentScreen === "invoice" ? undefined : "none" }}>
           <CreateInvoiceScreen
+            key={editingSession}
             actions={invoiceActions}
             activeScreen={currentScreen}
             onNavigate={handleNavigate}

@@ -193,14 +193,16 @@ describe("InvoiceHistoryScreen", () => {
 
     // Modal xem trước khổ A5 tiệm THU BA hiển thị
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("heading", { name: "Xem trước phiếu in hóa đơn" })).toBeVisible();
+    expect(
+      within(dialog).getByRole("heading", { name: "Xem trước phiếu in hóa đơn" }),
+    ).toBeVisible();
     expect(within(dialog).getByText("THU BA")).toBeVisible();
     expect(within(dialog).getByText("Bùi Tiến Dũng")).toBeVisible();
     expect(within(dialog).getByText("Xã Chợ Gạo, Tiền Giang")).toBeVisible();
     expect(within(dialog).getByText("Cát xây tô")).toBeVisible();
   });
 
-  it("marks invoice as printed when print button is clicked in preview modal", async () => {
+  it("marks invoice as printed only after explicit success confirmation", async () => {
     const originalPrint = window.print;
     window.print = vi.fn();
 
@@ -223,15 +225,21 @@ describe("InvoiceHistoryScreen", () => {
 
     // Click dòng hóa đơn để mở modal
     fireEvent.click(screen.getByText("#000101"));
-    expect(await screen.findByRole("heading", { name: "Xem trước phiếu in hóa đơn" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Xem trước phiếu in hóa đơn" }),
+    ).toBeVisible();
 
     // Bấm nút "In hóa đơn"
     const printButton = screen.getByRole("button", { name: /In hóa đơn/ });
     fireEvent.click(printButton);
+    expect(window.print).toHaveBeenCalled();
+    expect(markPrintedMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Đã in thành công" }));
 
     await waitFor(() => {
       expect(markPrintedMock).toHaveBeenCalledWith({
         invoiceId: "11111111-1111-4111-8111-111111111111",
+        printedAt: expect.any(String),
       });
       expect(window.print).toHaveBeenCalled();
     });
@@ -371,4 +379,3 @@ describe("InvoiceHistoryScreen", () => {
     localStorage.removeItem(`smart_invoice_customer_${legacyInvoiceId}`);
   });
 });
-

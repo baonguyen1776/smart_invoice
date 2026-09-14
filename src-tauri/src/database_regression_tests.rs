@@ -1365,3 +1365,51 @@ fn customer_metadata_and_print_tracking_persist_and_update() {
     });
 }
 
+
+#[test]
+fn delete_draft_rejects_completed_invoice_without_removing_items() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+        let mut draft = insert_invoice_draft(&pool, CreateInvoiceDraftInput { id: INVOICE_ID.into(), created_at: NOW.into() }).await.unwrap();
+        draft.items.push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        draft.total = 20_000;
+        draft.status = "completed".into();
+        draft.completed_at = Some(NOW.into());
+        persist_completed_invoice(&pool, draft).await.unwrap();
+        assert!(delete_draft(&pool, INVOICE_ID).await.is_err());
+        let loaded = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(loaded.status, "completed");
+        assert_eq!(loaded.total, 20_000);
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(loaded.items[0].id, ITEM_ID);
+    });
+}
+
+#[test]
+fn mixed_sign_totals_do_not_depend_on_item_order() {
+    let mut a = invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID);
+    a.quantity = 1; a.unit_price = MAX_SAFE_INTEGER; a.subtotal = MAX_SAFE_INTEGER;
+    let mut b = a.clone(); b.id = SECOND_ITEM_ID.into();
+    let mut c = a.clone(); c.quantity = -1; c.subtotal = -MAX_SAFE_INTEGER;
+    assert!(calculate_and_validate_total(&[a.clone(), b.clone(), c.clone()], MAX_SAFE_INTEGER).is_ok());
+    assert!(calculate_and_validate_total(&[a, c, b], MAX_SAFE_INTEGER).is_ok());
+}
+
+
+#[test]
+fn deleting_a_draft_cascades_its_items_and_rejects_a_missing_id() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+        let mut draft = insert_invoice_draft(&pool, CreateInvoiceDraftInput { id: INVOICE_ID.into(), created_at: NOW.into() }).await.unwrap();
+        draft.items.push(invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID));
+        draft.total = 20_000;
+        persist_draft_items_and_total(&pool, draft).await.unwrap();
+        delete_draft(&pool, INVOICE_ID).await.unwrap();
+        assert!(fetch_invoice(&pool, INVOICE_ID).await.unwrap().is_none());
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM invoice_items WHERE invoice_id = ?").bind(INVOICE_ID).fetch_one(&pool).await.unwrap();
+        assert_eq!(count, 0);
+        assert!(delete_draft(&pool, INVOICE_ID).await.is_err());
+    });
+}

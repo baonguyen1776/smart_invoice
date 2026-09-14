@@ -206,8 +206,8 @@ historical InvoiceItems.
 The MVP persistence contracts use:
 
 * UUID v4 strings for Product, Unit, Invoice, and InvoiceItem identifiers
-* non-negative safe-integer VND amounts for money
-* positive safe-integer InvoiceItem quantities
+* non-negative safe-integer VND prices; signed safe-integer invoice amounts
+* non-zero safe-integer InvoiceItem quantities (negative for returns/deductions)
 * ISO-8601 UTC text timestamps
 * optional Product SKU, brand, and category
 * transaction-time product and Unit snapshots on InvoiceItem

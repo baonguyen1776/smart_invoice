@@ -144,7 +144,7 @@ describe("SQLiteInvoiceRepository", () => {
     expect(JSON.stringify(result)).not.toContain("SQLITE_LOCKED");
   });
 
-  it("skips corrupted records in listInvoices so valid invoices remain available", async () => {
+  it("reports corrupted records instead of silently omitting invoices", async () => {
     const validDraft = makeDraft();
     const commandInvoker = vi.fn<CommandInvoker>().mockResolvedValue([
       {
@@ -172,10 +172,7 @@ describe("SQLiteInvoiceRepository", () => {
 
     const result = await repository.listInvoices("draft");
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value).toHaveLength(1);
-    expect(result.value[0].id).toBe(validDraft.id);
+    expect(result).toMatchObject({ ok: false, error: { code: "persistence", operation: "list" } });
   });
 
   it("serializes and rehydrates line item notes accurately", async () => {

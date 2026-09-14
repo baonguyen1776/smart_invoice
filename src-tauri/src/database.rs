@@ -427,8 +427,9 @@ fn calculate_and_validate_total(
     items: &[InvoiceItemRecord],
     supplied_total: i64,
 ) -> Result<i64, sqlx::Error> {
-    let mut total: i64 = 0;
-    let mut gross: i64 = 0;
+    let mut total: i128 = 0;
+    let mut gross: i128 = 0;
+    let mut discounts: i128 = 0;
     for item in items {
         if item.quantity == 0 || !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&item.quantity) {
             return Err(sqlx::Error::Protocol(
@@ -461,28 +462,28 @@ fn calculate_and_validate_total(
             (raw_discount - 5_000) / 10_000
         }) as i64;
         gross = gross
-            .checked_add(item.subtotal)
+            .checked_add(i128::from(item.subtotal))
             .ok_or_else(|| sqlx::Error::Protocol("Invoice gross amount overflow.".into()))?;
-        if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&gross) {
-            return Err(sqlx::Error::Protocol(
-                "Invoice gross amount exceeds safe integer limit.".into(),
-            ));
-        }
+        discounts += i128::from(discount);
         total = total
-            .checked_add(item.subtotal - discount)
+            .checked_add(i128::from(item.subtotal - discount))
             .ok_or_else(|| sqlx::Error::Protocol("Invoice total arithmetic overflow.".into()))?;
-        if !(-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&total) {
-            return Err(sqlx::Error::Protocol(
-                "Invoice total exceeds safe integer limit.".into(),
-            ));
-        }
     }
-    if total != supplied_total {
+    let limit = i128::from(MAX_SAFE_INTEGER);
+    if [gross, discounts, total]
+        .iter()
+        .any(|amount| !(-limit..=limit).contains(amount))
+    {
+        return Err(sqlx::Error::Protocol(
+            "Invoice amounts exceed safe integer limit.".into(),
+        ));
+    }
+    if total != i128::from(supplied_total) {
         return Err(sqlx::Error::Protocol(
             "Supplied invoice total does not match calculated total.".into(),
         ));
     }
-    Ok(total)
+    Ok(supplied_total)
 }
 
 async fn validate_item_ownership_and_insert(
@@ -740,14 +741,14 @@ async fn fetch_invoices(
 
 async fn delete_draft(pool: &SqlitePool, invoice_id: &str) -> Result<(), sqlx::Error> {
     let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
-    sqlx::query("DELETE FROM invoice_items WHERE invoice_id = ?")
+    // Delete children through the cascade only after the parent passes the status guard.
+    let deleted = sqlx::query("DELETE FROM invoices WHERE id = ? AND status = 'draft'")
         .bind(invoice_id)
         .execute(&mut *transaction)
         .await?;
-    sqlx::query("DELETE FROM invoices WHERE id = ? AND status = 'draft'")
-        .bind(invoice_id)
-        .execute(&mut *transaction)
-        .await?;
+    if deleted.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
     transaction.commit().await?;
     Ok(())
 }

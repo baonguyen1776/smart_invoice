@@ -3,6 +3,7 @@ import type { ProductCatalogError } from "../errors/ProductCatalogError";
 import type { Clock } from "../ports/Clock";
 import type { ProductSearchIndex } from "../ports/ProductSearchIndex";
 import type { ProductRepository } from "../repositories/ProductRepository";
+import type { ProductAliasRepository } from "../repositories/ProductAliasRepository";
 import { err, ok, type Result } from "../shared/Result";
 import { isUuidV4 } from "../shared/Uuid";
 import { mapDomainValidation, productNotFound, validationFailure } from "./ProductUseCaseSupport";
@@ -16,6 +17,7 @@ export class ReactivateProduct {
     private readonly repository: ProductRepository,
     private readonly clock: Clock,
     private readonly searchIndex?: ProductSearchIndex,
+    private readonly aliasRepository?: ProductAliasRepository,
   ) {}
 
   async execute(input: ReactivateProductInput): Promise<Result<Product, ProductCatalogError>> {
@@ -33,23 +35,27 @@ export class ReactivateProduct {
       return err(productNotFound(input.productId));
     }
 
-    if (found.value.isActive) {
-      return ok(found.value);
-    }
-
     let product: Product;
 
     try {
-      product = found.value.reactivate(this.clock.now());
+      product = found.value.isActive ? found.value : found.value.reactivate(this.clock.now());
     } catch (error) {
       return err(mapDomainValidation(error));
     }
 
-    const persisted = await this.repository.reactivate(product);
-
-    if (!persisted.ok) return err(persisted.error);
+    if (!found.value.isActive) {
+      const persisted = await this.repository.reactivate(product);
+      if (!persisted.ok) return err(persisted.error);
+    }
 
     this.searchIndex?.upsertProduct(product);
+    if (this.aliasRepository && this.searchIndex) {
+      const aliases = await this.aliasRepository.listForActiveProducts();
+      if (!aliases.ok) return aliases;
+      for (const alias of aliases.value) {
+        if (alias.productId === product.id) this.searchIndex.upsertAlias(alias);
+      }
+    }
     return ok(product);
   }
 }

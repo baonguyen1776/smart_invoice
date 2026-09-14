@@ -167,7 +167,9 @@ describe("App", () => {
     fireEvent.click(historyNavButton);
 
     // Displays History table and invoice item
-    expect(await screen.findByPlaceholderText("Tìm kiếm hóa đơn theo mã số, tên khách hàng, SĐT...")).toBeVisible();
+    expect(
+      await screen.findByPlaceholderText("Tìm kiếm hóa đơn theo mã số, tên khách hàng, SĐT..."),
+    ).toBeVisible();
     expect(screen.getByText("#000088")).toBeVisible();
     expect(screen.getByText("Khách Lịch Sử")).toBeVisible();
     expect(screen.getByText("Đã in")).toBeVisible();
@@ -244,5 +246,17 @@ describe("App", () => {
         level: 1,
       }),
     ).toBeVisible();
+
+    // Reopening the same history object starts a new editor session, even if its
+    // database timestamp has not changed since the earlier selection.
+    fireEvent.click(screen.getByRole("button", { name: "Tạo mới" }));
+    expect(await screen.findByText("#000001")).toBeVisible();
+    fireEvent.click(
+      within(screen.getByRole("navigation")).getByRole("button", { name: /Lịch sử/ }),
+    );
+    fireEvent.click(await screen.findByText("#000099"));
+    fireEvent.click(await screen.findByRole("button", { name: /Sửa hóa đơn/ }));
+    expect(await screen.findByText("#000099")).toBeVisible();
+    expect(screen.getByLabelText("Tên khách hàng")).toHaveValue("Khách Chờ Sửa");
   });
 });

@@ -141,7 +141,11 @@ export function InvoiceProductCell(props: InvoiceProductCellProps) {
                     onClick={() => select(product)}
                   >
                     <strong>{product.name}</strong>
-                    <small>{[product.sku, ...activeUnitNames].filter(Boolean).join(" · ")}</small>
+                    <small>
+                      {[product.sku, product.brand, product.category, ...activeUnitNames]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
                   </li>
                 ))}
               </ul>

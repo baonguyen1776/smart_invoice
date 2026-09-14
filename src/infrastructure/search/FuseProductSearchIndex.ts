@@ -71,7 +71,7 @@ export class FuseProductSearchIndex implements ProductSearchIndex {
     if (this.isReady) this.rebuild();
   }
 
-  search(query: string, limit: number): readonly ProductSearchCandidate[] {
+  search(query: string, limit: number, exactIdOnly = false): readonly ProductSearchCandidate[] {
     if (this.fuse === null) return [];
 
     const normalizedQuery = normalizeCatalogSearchText(query);
@@ -79,6 +79,7 @@ export class FuseProductSearchIndex implements ProductSearchIndex {
 
     const exactId = this.products.get(query.trim().toLowerCase());
     if (exactId !== undefined) return [toCandidate(exactId, "id", 0)];
+    if (exactIdOnly) return [];
 
     const exactSku = this.exactSku.get(normalizeExactKey(query));
     if (exactSku !== undefined) return [toCandidate(exactSku, "sku", 0)];

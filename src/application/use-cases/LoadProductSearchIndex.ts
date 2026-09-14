@@ -5,13 +5,22 @@ import type { ProductRepository } from "../repositories/ProductRepository";
 import { err, ok, type Result } from "../shared/Result";
 
 export class LoadProductSearchIndex {
+  private pending: Promise<Result<void, ProductSearchError>> | null = null;
   constructor(
     private readonly productRepository: ProductRepository,
     private readonly aliasRepository: ProductAliasRepository,
     private readonly searchIndex: ProductSearchIndex,
   ) {}
 
-  async execute(): Promise<Result<void, ProductSearchError>> {
+  execute(): Promise<Result<void, ProductSearchError>> {
+    if (this.pending) return this.pending;
+    this.pending = this.load().finally(() => {
+      this.pending = null;
+    });
+    return this.pending;
+  }
+
+  private async load(): Promise<Result<void, ProductSearchError>> {
     const products = await this.productRepository.list("active");
     if (!products.ok) return err(products.error);
 

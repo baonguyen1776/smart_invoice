@@ -39,14 +39,7 @@ export function parseDiscountPercent(value: string): number {
 }
 
 export function sumInvoiceAmounts(lines: readonly InvoiceLineAmounts[]): InvoiceLineAmounts {
-  let subtotal = 0n;
-  let discountAmount = 0n;
-  let payment = 0n;
-  for (const line of lines) {
-    subtotal += BigInt(line.subtotal);
-    discountAmount += BigInt(line.discountAmount);
-    payment += BigInt(line.payment);
-  }
+  const { subtotal, discountAmount, payment } = sumInvoiceAmountsExact(lines);
   const max = BigInt(Number.MAX_SAFE_INTEGER);
   if ([subtotal, discountAmount, payment].some((amount) => amount < -max || amount > max))
     throw new Error("Invoice amounts exceed the safe integer range.");
@@ -55,4 +48,18 @@ export function sumInvoiceAmounts(lines: readonly InvoiceLineAmounts[]): Invoice
     discountAmount: Number(discountAmount),
     payment: Number(payment),
   };
+}
+
+// Display groups (for example receipt pages) can exceed the persisted invoice range
+// before later return lines bring the final invoice amounts back within that range.
+export function sumInvoiceAmountsExact(lines: readonly InvoiceLineAmounts[]) {
+  let subtotal = 0n;
+  let discountAmount = 0n;
+  let payment = 0n;
+  for (const line of lines) {
+    subtotal += BigInt(line.subtotal);
+    discountAmount += BigInt(line.discountAmount);
+    payment += BigInt(line.payment);
+  }
+  return { subtotal, discountAmount, payment };
 }

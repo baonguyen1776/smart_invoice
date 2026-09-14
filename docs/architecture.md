@@ -455,7 +455,7 @@ Forecasting, Barcode Hardware, **Inventory/Stock Quantity Tracking**.
 **Confirmed:** PC-first, Tauri v2, React + TypeScript, Vite, SQLite,
 Full 4-layer Architecture, SOLID-oriented design, Fuse.js, No barcode
 dependency, Human-in-the-loop AI, Local-first MVP, No inventory
-quantity tracking, UUID domain identifiers, integer VND money, positive-integer
+quantity tracking, UUID domain identifiers, integer VND money, non-zero integer
 invoice quantities, transaction-time InvoiceItem snapshots, optional Product
 SKU/brand, and source-scoped ProductAlias matching.
 
@@ -492,10 +492,13 @@ remain non-binding while their status is `Proposed`.
 #### Money
 
 - The MVP currency is VND and is not repeated on each row.
-- All monetary values are non-negative integer VND amounts.
-- The valid persisted range is `0..9,007,199,254,740,991`
-  (`Number.MAX_SAFE_INTEGER`). Each price, subtotal, and total must remain in
-  that range.
+- Prices are non-negative integer VND amounts. Invoice subtotals, discounts,
+  and payments may be negative for returns/deductions (see §19.7).
+- Prices range from `0` to `9,007,199,254,740,991` (`Number.MAX_SAFE_INTEGER`).
+  Persisted invoice amounts range from `-9,007,199,254,740,991` to the positive
+  limit. Validate final aggregate subtotal, discount, and payment after exact
+  accumulation, independently of item order. Display-only page totals can use
+  wider exact integers when later return lines offset earlier sales.
 - SQLite uses `INTEGER`; TypeScript uses `number` guarded by
   `Number.isSafeInteger` and the documented range validations.
 - `REAL`, floating-point persisted money, and implicit currency conversion are
@@ -505,11 +508,12 @@ remain non-binding while their status is `Proposed`.
 
 #### Quantity
 
-- `InvoiceItem.quantity` is a positive integer in the range
-  `1..9,007,199,254,740,991` (`Number.MAX_SAFE_INTEGER`).
+- `InvoiceItem.quantity` is a non-zero safe integer with absolute value at most
+  `9,007,199,254,740,991` (`Number.MAX_SAFE_INTEGER`). Positive values represent
+  sales; negative values represent returns/deductions.
 - Fractional quantities are deferred until a real use case defines precision
   and rounding behavior.
-- Invoice quantity represents an amount sold only. It does not represent stock
+- Invoice quantity represents an amount sold or returned. It does not represent stock
   on hand and never triggers inventory deduction.
 
 #### Timestamps

@@ -1,4 +1,6 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { sumInvoiceAmountsExact } from "../../domain/rules/CalculateInvoiceAmounts";
+import { formatInvoiceAmount } from "../formatters/FormatInvoiceAmount";
 import type { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import type { InvoiceItemChange } from "../../application/use-cases/ApplyInvoiceItemChange";
 import type { SearchProducts } from "../../application/use-cases/SearchProducts";
@@ -18,6 +20,7 @@ interface InvoiceLineItemsProps {
   readonly onOpenDrafts?: () => void;
   readonly draftsCount?: number;
   readonly isDraftsOpen?: boolean;
+  readonly onPendingInputChange?: (pending: boolean) => void;
 }
 const COLUMNS = [
   ["name", "Tên hàng hóa"],
@@ -62,6 +65,10 @@ function moveCell(event: KeyboardEvent<HTMLTableElement>) {
 
 export function InvoiceLineItems(props: InvoiceLineItemsProps) {
   const grid = useInvoiceGrid(props);
+  const onPendingInputChange = props.onPendingInputChange;
+  useEffect(() => {
+    onPendingInputChange?.(grid.hasPendingInput);
+  }, [grid.hasPendingInput, onPendingInputChange]);
   const [filter, setFilter] = useState("");
   const [activeNoteRowIds, setActiveNoteRowIds] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<{
@@ -111,23 +118,20 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
           : Number(left) - Number(right);
       return sort.direction === "ascending" ? order : -order;
     });
-  const money = (value?: number) => {
+  const money = (value?: number | bigint) => {
     if (value === undefined) return "-";
-    if (value < 0) return `(${Math.abs(value).toLocaleString("vi-VN")})`;
-    return value.toLocaleString("vi-VN");
+    return formatInvoiceAmount(value);
   };
 
-  const { totalSubtotal, totalDiscount, totalPayment } = rows.reduce(
-    (acc, row) => {
-      if (row.isTrailing) return acc;
-      const p = previewInvoiceRow(row.values);
-      return {
-        totalSubtotal: acc.totalSubtotal + (p?.subtotal ?? 0),
-        totalDiscount: acc.totalDiscount + (p?.discountAmount ?? 0),
-        totalPayment: acc.totalPayment + (p?.payment ?? 0),
-      };
-    },
-    { totalSubtotal: 0, totalDiscount: 0, totalPayment: 0 },
+  const {
+    subtotal: totalSubtotal,
+    discountAmount: totalDiscount,
+    payment: totalPayment,
+  } = sumInvoiceAmountsExact(
+    grid.rows.flatMap((row) => {
+      const preview = previewInvoiceRow(row.values);
+      return preview ? [preview] : [];
+    }),
   );
 
   return (
@@ -243,7 +247,11 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
                 const preview = previewInvoiceRow(values);
                 const lookup =
                   values.selection && !values.product
-                    ? props.searchProducts.execute({ query: values.selection.productId, limit: 1 })
+                    ? props.searchProducts.execute({
+                        query: values.selection.productId,
+                        limit: 1,
+                        exactIdOnly: true,
+                      })
                     : null;
                 const product =
                   values.product ??
@@ -493,23 +501,11 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
                 Tổng Cộng
               </td>
               <td className="grid-amount">
-                <span>
-                  {totalSubtotal !== 0
-                    ? totalSubtotal < 0
-                      ? `(${Math.abs(totalSubtotal).toLocaleString("vi-VN")})`
-                      : totalSubtotal.toLocaleString("vi-VN")
-                    : "-"}
-                </span>
+                <span>{totalSubtotal !== 0n ? formatInvoiceAmount(totalSubtotal) : "-"}</span>
               </td>
               <td className="grid-total-empty"></td>
               <td className="grid-amount">
-                <span>
-                  {totalDiscount !== 0
-                    ? totalDiscount < 0
-                      ? `(${Math.abs(totalDiscount).toLocaleString("vi-VN")})`
-                      : totalDiscount.toLocaleString("vi-VN")
-                    : "-"}
-                </span>
+                <span>{totalDiscount !== 0n ? formatInvoiceAmount(totalDiscount) : "-"}</span>
               </td>
               <td
                 className="grid-amount grid-payment"
@@ -517,9 +513,9 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
                 aria-label="Tổng quan hóa đơn"
               >
                 <span>
-                  {totalPayment !== 0
+                  {totalPayment !== 0n
                     ? totalPayment < 0
-                      ? `(${Math.abs(totalPayment).toLocaleString("vi-VN")} ₫)`
+                      ? `(${(-totalPayment).toLocaleString("vi-VN")} ₫)`
                       : `${totalPayment.toLocaleString("vi-VN")} ₫`
                     : "-"}
                 </span>

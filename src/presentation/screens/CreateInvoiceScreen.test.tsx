@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { err, ok } from "../../application/shared/Result";
+import { UpdateInvoiceCustomer } from "../../application/use-cases/UpdateInvoiceCustomer";
 import { ApplyInvoiceItemChange } from "../../application/use-cases/ApplyInvoiceItemChange";
 import { InMemoryInvoiceRepository } from "../../test/doubles/InMemoryInvoiceRepository";
 import { Invoice } from "../../domain/entities/Invoice";
@@ -134,6 +135,7 @@ function makeActions(initialInvoice = makeDraftInvoice()) {
   );
   const actions: InvoiceScreenActions = {
     createInvoiceDraft: { execute: vi.fn(async () => ok(initialInvoice)) },
+    updateInvoiceCustomer: new UpdateInvoiceCustomer(repository, { now: () => NOW }),
     applyInvoiceItemChange: { execute: vi.fn((input) => useCase.execute(input)) },
     searchProducts: {
       execute: vi.fn(({ query }) =>
@@ -684,9 +686,7 @@ describe("Complete and overwrite completed invoices (#19)", () => {
     fireEvent.click(completeButton);
 
     await waitFor(() => {
-      expect(completeSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ invoiceId: draft.id }),
-      );
+      expect(completeSpy).toHaveBeenCalledWith(expect.objectContaining({ invoiceId: draft.id }));
     });
 
     expect(screen.getByText("ĐÃ HOÀN TẤT")).toBeVisible();
@@ -852,6 +852,7 @@ describe("Complete and overwrite completed invoices (#19)", () => {
     await screen.findByText("Hóa đơn đã chốt đang có thay đổi tạm thời.");
 
     // Click "Lưu ghi đè"
+    await waitFor(() => expect(screen.getByRole("button", { name: "Lưu ghi đè" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Lưu ghi đè" }));
 
     // Confirmation dialog appears
@@ -1109,4 +1110,320 @@ describe("Complete and overwrite completed invoices (#19)", () => {
       expect(screen.getByText("Tạo hóa đơn mới")).toBeVisible();
     });
   });
+});
+
+describe("Invoice logic regressions", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+  it("completion can be retried after a transient failure", async () => {
+    const { actions: base } = populated();
+    const actions = {
+      ...base,
+      completeInvoice: {
+        execute: vi.fn(async () =>
+          err({
+            code: "persistence" as const,
+            operation: "complete" as const,
+            message: "temporarily locked",
+          }),
+        ),
+      },
+    };
+    await ready(actions);
+    fireEvent.click(screen.getByRole("button", { name: "Hoàn thành" }));
+    await screen.findByText("temporarily locked");
+    expect(screen.getByRole("button", { name: "Hoàn thành" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Hoàn thành" }));
+    await waitFor(() => expect(actions.completeInvoice.execute).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "Thử lại" })).toBeNull();
+  });
+  it("completed overwrite is blocked while a visible row is invalid", async () => {
+    const p = makeSingleUnitProduct();
+    const invoice = makeCompletedInvoice([makeInvoiceItem(ITEM_ID_1, p, p.units[0])]);
+    const { actions: base } = makeActions(invoice);
+    const overwrite = vi.fn(async (input: { items: readonly InvoiceItem[] }) =>
+      ok(invoice.overwriteCompleted(input.items, NOW)),
+    );
+    const actions = { ...base, overwriteCompletedInvoice: { execute: overwrite } };
+    await ready(actions);
+    fireEvent.blur(edit("Số lượng dòng 1", "2"));
+    await screen.findByRole("button", { name: "Lưu ghi đè" });
+    fireEvent.blur(edit("Số lượng dòng 1", "0"));
+    expect(input("Số lượng dòng 1")).toHaveAttribute("data-dirty", "true");
+    expect(screen.getByRole("button", { name: "Lưu ghi đè" })).toBeDisabled();
+    expect(overwrite).not.toHaveBeenCalled();
+    expect(input("Số lượng dòng 1")).toHaveValue(0);
+  });
+  it("cold start preserves persisted customer metadata during item edits", async () => {
+    const p = makeSingleUnitProduct();
+    const original = makeDraftInvoice([makeInvoiceItem(ITEM_ID_1, p, p.units[0])]).withCustomer(
+      { name: "Persisted Customer", phone: "0901111222" },
+      NOW,
+    );
+    const { actions, repository } = makeActions(original);
+    await ready(actions);
+    expect(input("Tên khách hàng")).toHaveValue("Persisted Customer");
+    fireEvent.blur(edit("Số lượng dòng 1", "2"));
+    await waitFor(() => expect(repository.saveDraftCalls).toHaveLength(1));
+    expect(repository.saveDraftCalls[0].customerName).toBe("Persisted Customer");
+  });
+  it("customer-only completed edits are staged and can be discarded", async () => {
+    const p = makeSingleUnitProduct();
+    const original = makeCompletedInvoice([makeInvoiceItem(ITEM_ID_1, p, p.units[0])]);
+    const { actions } = makeActions(original);
+    await ready(actions);
+    edit("Tên khách hàng", "Uncommitted Customer");
+    expect(screen.getByRole("button", { name: "Lưu ghi đè" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "In hóa đơn" })).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Hủy thay đổi" })[0]);
+    expect(input("Tên khách hàng")).toHaveValue("");
+  });
+  it("customer-only draft edits persist before switching invoices", async () => {
+    const original = makeDraftInvoice().withCustomer(
+      { name: "Old", address: "Existing address" },
+      NOW,
+    );
+    const other = Invoice.createDraft({
+      id: crypto.randomUUID(),
+      invoiceNumber: 2,
+      createdAt: NOW,
+    });
+    const { actions: base, repository } = makeActions(original);
+    await repository.saveDraft(other);
+    const actions = { ...base, listInvoices: { execute: () => repository.listInvoices("draft") } };
+    await ready(actions);
+    fireEvent.blur(edit("Tên khách hàng", "New"));
+    await waitFor(() => expect(repository.saveDraftCalls.slice(-1)[0]?.customerName).toBe("New"));
+    expect(repository.saveDraftCalls.slice(-1)[0]?.customerAddress).toBe("Existing address");
+    fireEvent.click(screen.getByRole("button", { name: /Bản nháp/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mở bản nháp" }));
+    await screen.findByText("#000002");
+    fireEvent.click(screen.getByRole("button", { name: /Bản nháp/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mở bản nháp" }));
+    expect(input("Tên khách hàng")).toHaveValue("New");
+  });
+  it("failed draft deletion retains customer cache and displays an error", async () => {
+    const original = makeDraftInvoice();
+    const other = Invoice.createDraft({
+      id: crypto.randomUUID(),
+      invoiceNumber: 2,
+      createdAt: NOW,
+    });
+    const key = `smart_invoice_customer_${other.id}`;
+    localStorage.setItem(key, JSON.stringify({ name: "Unsynced Customer" }));
+    const { actions: base } = makeActions(original);
+    const actions = {
+      ...base,
+      listInvoices: { execute: vi.fn(async () => ok([original, other])) },
+      deleteInvoiceDraft: {
+        execute: vi.fn(async () =>
+          err({
+            code: "persistence" as const,
+            operation: "delete_draft" as const,
+            message: "locked",
+          }),
+        ),
+      },
+    };
+    await ready(actions);
+    fireEvent.click(screen.getByRole("button", { name: /Bản nháp/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Xóa bản nháp #000002" }));
+    await screen.findByText("Không thể xóa bản nháp. Vui lòng thử lại.");
+    expect(localStorage.getItem(key)).toContain("Unsynced Customer");
+    expect(screen.queryByText("Đã xóa bản nháp #000002")).toBeNull();
+  });
+  it("undo preserves the removed line note", async () => {
+    const p = makeSingleUnitProduct();
+    const original = makeDraftInvoice([
+      makeInvoiceItem(ITEM_ID_1, p, p.units[0], 1, 29000, 0, "Already delivered"),
+    ]);
+    const { actions, repository } = makeActions(original);
+    await ready(actions);
+    fireEvent.click(screen.getByRole("button", { name: "Xóa dòng 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Hoàn tác/ }));
+    await waitFor(() => expect(repository.saveDraftCalls).toHaveLength(2));
+    expect(repository.saveDraftCalls[1].items[0].note).toBe("Already delivered");
+  });
+  it("undo is cleared when creating another invoice", async () => {
+    const { actions: base, repository } = populated();
+    const actions = {
+      ...base,
+      createInvoiceDraft: { execute: vi.fn(base.createInvoiceDraft.execute) },
+    };
+    await ready(actions);
+    fireEvent.click(screen.getByRole("button", { name: "Xóa dòng 1" }));
+    await screen.findByRole("button", { name: /Hoàn tác/ });
+    const other = Invoice.createDraft({
+      id: crypto.randomUUID(),
+      invoiceNumber: 2,
+      createdAt: NOW,
+    });
+    await repository.saveDraft(other);
+    actions.createInvoiceDraft.execute.mockResolvedValueOnce(ok(other));
+    fireEvent.click(screen.getByRole("button", { name: "Tạo mới" }));
+    await screen.findByText("#000002");
+    expect(screen.queryByRole("button", { name: /Hoàn tác/ })).toBeNull();
+    expect(repository.saveDraftCalls.slice(-1)[0]?.items).toHaveLength(0);
+  });
+  it("filtering lines preserves the grand total", async () => {
+    const p = makeSingleUnitProduct(),
+      p2 = makeMultiUnitProduct();
+    const original = makeDraftInvoice([
+      makeInvoiceItem(ITEM_ID_1, p, p.units[0]),
+      makeInvoiceItem(crypto.randomUUID(), p2, p2.units[0]),
+    ]);
+    const { actions } = makeActions(original);
+    await ready(actions);
+    expect(original.total).toBe(39000);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Cà phê" } });
+    expect(screen.getByRole("complementary", { name: "Tổng quan hóa đơn" })).toHaveTextContent(
+      "39.000 ₫",
+    );
+  });
+  it("late saves cannot replace a different invoice selected from history", async () => {
+    const { actions: base } = populated();
+    let resolve!: (value: ReturnType<typeof ok<Invoice>>) => void;
+    const pending = new Promise<ReturnType<typeof ok<Invoice>>>((r) => {
+      resolve = r;
+    });
+    const actions = { ...base, applyInvoiceItemChange: { execute: vi.fn(() => pending) } };
+    const view = render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+    fireEvent.blur(edit("Số lượng dòng 1", "2"));
+    await waitFor(() => expect(actions.applyInvoiceItemChange.execute).toHaveBeenCalled());
+    const p = makeSingleUnitProduct();
+    const old = makeDraftInvoice([makeInvoiceItem(ITEM_ID_1, p, p.units[0], 2)]);
+    const id = crypto.randomUUID();
+    const item = InvoiceItem.create({
+      ...old.items[0].toState(),
+      id: crypto.randomUUID(),
+      invoiceId: id,
+    });
+    const other = Invoice.createDraft({ id, invoiceNumber: 99, createdAt: NOW })
+      .replaceDraftItems([item], NOW)
+      .complete(NOW);
+    view.rerender(<CreateInvoiceScreen actions={actions} editingInvoice={other} />);
+    await screen.findByText("#000099");
+    await act(async () => {
+      resolve(ok(old));
+      await pending;
+    });
+    expect(screen.getByText("#000099")).toBeVisible();
+  });
+});
+
+describe("Customer persistence ordering", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("keeps a newer customer edit while an earlier item save finishes", async () => {
+    const { actions, repository } = populated();
+    const save = repository.saveDraft.bind(repository);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(repository, "saveDraft").mockImplementationOnce(async (value) => {
+      await pending;
+      return save(value);
+    });
+    await ready(actions);
+    fireEvent.blur(edit("Số lượng dòng 1", "2"));
+    await waitFor(() => expect(repository.saveDraft).toHaveBeenCalledTimes(1));
+    fireEvent.blur(edit("Tên khách hàng", "New customer"));
+    await act(async () => {
+      release();
+      await pending;
+    });
+    await waitFor(() =>
+      expect(repository.saveDraftCalls.slice(-1)[0]?.customerName).toBe("New customer"),
+    );
+    expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].quantity).toBe(2);
+    expect(input("Tên khách hàng")).toHaveValue("New customer");
+    expect(input("Số lượng dòng 1")).toHaveValue(2);
+  });
+
+  it("recovers customer input after a failed save and removes recovery cache only on success", async () => {
+    const original = makeDraftInvoice().withCustomer({ name: "Original" }, NOW);
+    const { actions, repository } = makeActions(original);
+    const view = render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+    repository.failNext("save_draft", "locked");
+    fireEvent.blur(edit("Tên khách hàng", "Recovery customer"));
+    await screen.findByText("Chưa lưu được thông tin khách hàng. Vui lòng thử lại.");
+    expect(localStorage.getItem(`smart_invoice_customer_${original.id}`)).toContain(
+      "Recovery customer",
+    );
+    view.unmount();
+    await ready(actions);
+    expect(input("Tên khách hàng")).toHaveValue("Recovery customer");
+    fireEvent.click(screen.getByRole("button", { name: "Lưu thông tin khách hàng" }));
+    await waitFor(() =>
+      expect(localStorage.getItem(`smart_invoice_customer_${original.id}`)).toBeNull(),
+    );
+    expect(await repository.findById(original.id)).toMatchObject({
+      ok: true,
+      value: { customerName: "Recovery customer" },
+    });
+  });
+
+  it("clears all customer fields durably without reviving cached values", async () => {
+    const original = makeDraftInvoice().withCustomer({ name: "Original" }, NOW);
+    const { actions, repository } = makeActions(original);
+    const view = render(<CreateInvoiceScreen actions={actions} />);
+    await screen.findByText("#000001");
+    fireEvent.blur(edit("Tên khách hàng", ""));
+    await waitFor(() => expect(repository.saveDraftCalls.slice(-1)[0]?.customerName).toBeNull());
+    view.unmount();
+    const restored = await repository.findById(original.id);
+    if (!restored.ok || !restored.value) throw new Error("Missing saved draft");
+    await ready({ ...actions, createInvoiceDraft: { execute: async () => ok(restored.value!) } });
+    expect(input("Tên khách hàng")).toHaveValue("");
+  });
+
+  it("retries a failed completed overwrite without requiring another edit", async () => {
+    const product = makeSingleUnitProduct();
+    const original = makeCompletedInvoice([makeInvoiceItem(ITEM_ID_1, product, product.units[0])]);
+    const { actions: base } = makeActions(original);
+    let attempts = 0;
+    const overwrite = vi.fn(async ({ items }: { items: readonly InvoiceItem[] }) => {
+      attempts += 1;
+      return attempts === 1
+        ? err({
+            code: "persistence" as const,
+            operation: "overwrite_completed" as const,
+            message: "locked",
+          })
+        : ok(original.overwriteCompleted(items, NOW));
+    });
+    await ready({ ...base, overwriteCompletedInvoice: { execute: overwrite } });
+    fireEvent.blur(edit("Số lượng dòng 1", "2"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Lưu ghi đè" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Lưu ghi đè" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận ghi đè" }));
+    await screen.findByText("Không thể ghi đè hóa đơn đã chốt.");
+    fireEvent.click(screen.getByRole("button", { name: "Lưu ghi đè" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận ghi đè" }));
+    await waitFor(() => expect(overwrite).toHaveBeenCalledTimes(2));
+    await screen.findByText("Đã cập nhật hóa đơn đã chốt #000001");
+  });
+});
+
+it("records printing from the invoice editor only after success confirmation", async () => {
+  localStorage.clear();
+  const product = makeSingleUnitProduct();
+  const original = makeCompletedInvoice([makeInvoiceItem(ITEM_ID_1, product, product.units[0])]);
+  const { actions: base } = makeActions(original);
+  const mark = vi.fn(async () => ok(undefined));
+  const print = vi.spyOn(window, "print").mockImplementation(() => {});
+  await ready({ ...base, markInvoicePrinted: { execute: mark } });
+  fireEvent.click(screen.getByRole("button", { name: "In hóa đơn" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /In hóa đơn/ }));
+  expect(mark).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Đã in thành công" }));
+  await waitFor(() =>
+    expect(mark).toHaveBeenCalledWith({ invoiceId: original.id, printedAt: expect.any(String) }),
+  );
+  expect(print).toHaveBeenCalledTimes(1);
+  print.mockRestore();
 });
