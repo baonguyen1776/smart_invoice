@@ -86,3 +86,12 @@ function report(
   );
   if (!passed) throw new Error(`${name} exceeded its benchmark budget.`);
 }
+
+const exactMissStarted = performance.now();
+for (let run = 0; run < 100; run += 1) {
+  const results = index.search("ffffffff-ffff-4fff-8fff-ffffffffffff", 1, true);
+  if (results.length !== 0) throw new Error("Unexpected exact ID match.");
+}
+console.log(
+  `BENCH exact_id_misses n=100 total_ms=${(performance.now() - exactMissStarted).toFixed(3)}`,
+);

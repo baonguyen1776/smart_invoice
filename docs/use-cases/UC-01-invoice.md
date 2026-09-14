@@ -148,3 +148,26 @@ sticky totals row includes all filled lines, irrespective of table filtering.
 Line CK uses the precision, rounding, persistence, and net-total contract in
 `docs/architecture.md` §19.6. Deleting and undoing a line retains its CK. The
 right summary keeps its layout and displays the saved invoice total after CK.
+
+
+## Customer persistence and print confirmation (approved September 14, 2026)
+
+- Draft customer fields save on field blur independently of item edits, through
+  an Application use case and the same per-editor save queue as item changes.
+  Application also serializes the complete draft read/edit/write operation per
+  invoice and repository instance, including across editor remounts. This is
+  process-local ordering, not cross-process concurrency control.
+- SQLite is authoritative for saved customer data. Browser storage retains only
+  explicitly pending recovery input; successful persistence removes that cache.
+  Legacy unmarked caches migrate only when the draft has no persisted customer
+  fields. A failed save retains input and provides retry.
+- Customer-only edits to a completed invoice are staged, use the existing
+  confirmed overwrite, and are restored by Discard Changes along with items.
+- Pending or invalid grid input blocks both completion and confirmed overwrite.
+- With the current browser print dialog, opening or dismissing the dialog does
+  not establish that printing succeeded. After the dialog returns, show
+  “Đã in thành công” and “Đã hủy / Chưa in”. Persist `is_printed`/`printed_at`
+  only after the user explicitly confirms success. Cancellation and print-dialog
+  errors leave the prior status unchanged. A failed status write can be retried
+  without printing another copy. This temporary confirmation flow does not
+  replace the planned hardware spike and PrinterService adapter.

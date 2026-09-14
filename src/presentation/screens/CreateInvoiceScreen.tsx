@@ -4,6 +4,7 @@ import type {
   ApplyInvoiceItemChange,
   InvoiceItemChange,
 } from "../../application/use-cases/ApplyInvoiceItemChange";
+import type { UpdateInvoiceCustomer } from "../../application/use-cases/UpdateInvoiceCustomer";
 import type { CompleteInvoice } from "../../application/use-cases/CompleteInvoice";
 import type { CreateInvoiceDraft } from "../../application/use-cases/CreateInvoiceDraft";
 import type { DeleteInvoiceDraft } from "../../application/use-cases/DeleteInvoiceDraft";
@@ -20,6 +21,7 @@ import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewM
 import "./CreateInvoiceScreen.css";
 
 export interface InvoiceScreenActions {
+  readonly updateInvoiceCustomer?: Pick<UpdateInvoiceCustomer, "execute">;
   readonly createInvoiceDraft: Pick<CreateInvoiceDraft, "execute">;
   readonly restoreInvoiceDraft?: Pick<RestoreInvoiceDraft, "execute">;
   readonly applyInvoiceItemChange: Pick<ApplyInvoiceItemChange, "execute">;
@@ -83,7 +85,15 @@ export interface CreateInvoiceScreenProps {
   readonly editingInvoice?: Invoice | null;
 }
 
-export function CreateInvoiceScreen({
+export function CreateInvoiceScreen(props: CreateInvoiceScreenProps) {
+  const [selection, setSelection] = useState({ invoice: props.editingInvoice, session: 0 });
+  if (selection.invoice !== props.editingInvoice) {
+    setSelection({ invoice: props.editingInvoice, session: selection.session + 1 });
+  }
+  return <InvoiceEditor key={selection.session} {...props} />;
+}
+
+function InvoiceEditor({
   actions,
   onNavigateToProducts,
   onNavigate,
@@ -91,19 +101,21 @@ export function CreateInvoiceScreen({
   onCompleteInvoice,
   editingInvoice,
 }: CreateInvoiceScreenProps) {
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [invoice, setInvoice] = useState<Invoice | null>(editingInvoice ?? null);
+  const [isLoading, setIsLoading] = useState(!editingInvoice);
   const [pendingChanges, setPendingChanges] = useState(0);
   const [lastRemoved, setLastRemoved] = useState<InvoiceItem | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [customerNote, setCustomerNote] = useState("");
+  const [customerName, setCustomerName] = useState(editingInvoice?.customerName ?? "");
+  const [customerPhone, setCustomerPhone] = useState(editingInvoice?.customerPhone ?? "");
+  const [customerNote, setCustomerNote] = useState(editingInvoice?.customerNote ?? "");
   const [drafts, setDrafts] = useState<readonly Invoice[]>([]);
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
-  const [originalCompletedInvoice, setOriginalCompletedInvoice] = useState<Invoice | null>(null);
+  const [originalCompletedInvoice, setOriginalCompletedInvoice] = useState<Invoice | null>(
+    editingInvoice?.status === "completed" ? editingInvoice : null,
+  );
   const [hasStagedChanges, setHasStagedChanges] = useState(false);
   const [isConfirmOverwriteOpen, setIsConfirmOverwriteOpen] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -111,7 +123,37 @@ export function CreateInvoiceScreen({
   const undoButtonRef = useRef<HTMLButtonElement>(null);
   const changeQueue = useRef<Promise<unknown>>(Promise.resolve());
   const selectionPending = useRef(false);
+  const [hasPendingInput, setHasPendingInput] = useState(false);
+  const [gridReset, setGridReset] = useState(0);
+  const [customerDirty, setCustomerDirty] = useState(false);
+  const customerRevision = useRef(0);
+  const activeInvoice = useRef(invoice);
+  const isMounted = useRef(true);
+  const deletingDraft = useRef(false);
+  const latestDraftListRequest = useRef(0);
   const isSaving = pendingChanges > 0 || isOverwriting;
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+  function updateInvoice(value: Invoice) {
+    activeInvoice.current = value;
+    setInvoice(value);
+  }
+  function resetEditor(value: Invoice) {
+    updateInvoice(value);
+    setLastRemoved(null);
+    setHasPendingInput(false);
+    setHasStagedChanges(false);
+    setCustomerDirty(false);
+    setErrorMessage(null);
+    setIsConfirmOverwriteOpen(false);
+    setIsReceiptModalOpen(false);
+    setOriginalCompletedInvoice(value.status === "completed" ? value : null);
+    loadCustomerForInvoice(value.id, value);
+  }
 
   const [loadAttempt, setLoadAttempt] = useState(0);
   const draftRequest = useRef<{
@@ -121,56 +163,47 @@ export function CreateInvoiceScreen({
     promise: ReturnType<InvoiceScreenActions["createInvoiceDraft"]["execute"]>;
   } | null>(null);
 
-  const loadCustomerForInvoice = useCallback(
-    (invoiceId: string, invoiceEntity?: Invoice | null) => {
-      try {
-        localStorage.setItem("smart_invoice_active_draft_id", invoiceId);
-        if (
-          invoiceEntity &&
-          (invoiceEntity.customerName ||
-            invoiceEntity.customerPhone ||
-            invoiceEntity.customerNote)
-        ) {
-          setCustomerName(invoiceEntity.customerName || "");
-          setCustomerPhone(invoiceEntity.customerPhone || "");
-          setCustomerNote(invoiceEntity.customerNote || "");
-          return;
-        }
-        const saved = localStorage.getItem(`smart_invoice_customer_${invoiceId}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setCustomerName(parsed.name || "");
-          setCustomerPhone(parsed.phone || "");
-          setCustomerNote(parsed.note || "");
-          return;
-        }
-      } catch {
-        // ignore
-      }
-      setCustomerName("");
-      setCustomerPhone("");
-      setCustomerNote("");
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (editingInvoice) {
-      setInvoice(editingInvoice);
-      if (editingInvoice.status === "completed") {
-        setOriginalCompletedInvoice(editingInvoice);
-      } else {
-        setOriginalCompletedInvoice(null);
-      }
-      loadCustomerForInvoice(editingInvoice.id, editingInvoice);
+  const loadCustomerForInvoice = useCallback((invoiceId: string, entity: Invoice) => {
+    // A pending cache is recovery input; successful writes remove it. Older caches
+    // without that marker are migrated only when SQLite has no customer fields.
+    const cached = entity.status === "draft" ? getSavedCustomer(invoiceId, undefined, true) : null;
+    const legacy =
+      cached ??
+      (entity.status === "draft" &&
+      !entity.customerName &&
+      !entity.customerPhone &&
+      !entity.customerAddress &&
+      !entity.customerNote
+        ? getSavedCustomer(invoiceId)
+        : null);
+    const customer = {
+      name: legacy?.name ?? entity.customerName ?? "",
+      phone: legacy?.phone ?? entity.customerPhone ?? "",
+      address: legacy?.address ?? entity.customerAddress,
+      note: legacy?.note ?? entity.customerNote ?? "",
+    };
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone);
+    setCustomerNote(customer.note);
+    setCustomerDirty(Boolean(legacy));
+    if (legacy) {
+      const recovered = entity.withCustomer(customer, entity.updatedAt);
+      activeInvoice.current = recovered;
+      setInvoice(recovered);
     }
-  }, [editingInvoice, loadCustomerForInvoice]);
+    try {
+      localStorage.setItem("smart_invoice_active_draft_id", invoiceId);
+    } catch {
+      /* Optional navigation preference. */
+    }
+  }, []);
 
   const refreshInvoices = useCallback(async () => {
     if (!actions.listInvoices) return;
+    const request = ++latestDraftListRequest.current;
     try {
       const draftsResult = await actions.listInvoices.execute({ status: "draft" });
-      if (draftsResult.ok) {
+      if (draftsResult.ok && isMounted.current && request === latestDraftListRequest.current) {
         setDrafts(draftsResult.value);
       }
     } catch {
@@ -180,6 +213,17 @@ export function CreateInvoiceScreen({
 
   useEffect(() => {
     let isCancelled = false;
+    if (editingInvoice) {
+      void Promise.resolve().then(() => {
+        if (!isCancelled) {
+          loadCustomerForInvoice(editingInvoice.id, editingInvoice);
+          void refreshInvoices();
+        }
+      });
+      return () => {
+        isCancelled = true;
+      };
+    }
     const activeAction = actions.restoreInvoiceDraft ?? actions.createInvoiceDraft;
 
     // Reuse the in-flight request during StrictMode's effect replay.
@@ -211,11 +255,12 @@ export function CreateInvoiceScreen({
         const result = await request;
         if (isCancelled) return;
         if (result.ok) {
+          activeInvoice.current = result.value;
           setInvoice(result.value);
           if (result.value.status === "completed") {
             setOriginalCompletedInvoice(result.value);
           }
-          loadCustomerForInvoice(result.value.id);
+          loadCustomerForInvoice(result.value.id, result.value);
           void refreshInvoices();
         } else {
           setErrorMessage("Không thể mở hóa đơn nháp. Vui lòng thử lại.");
@@ -231,6 +276,7 @@ export function CreateInvoiceScreen({
       isCancelled = true;
     };
   }, [
+    editingInvoice,
     actions.createInvoiceDraft,
     actions.restoreInvoiceDraft,
     loadAttempt,
@@ -248,37 +294,79 @@ export function CreateInvoiceScreen({
   }, [lastRemoved]);
 
   function handleCustomerChange(field: "name" | "phone" | "note", value: string) {
-    const nextName = field === "name" ? value : customerName;
-    const nextPhone = field === "phone" ? value : customerPhone;
-    const nextNote = field === "note" ? value : customerNote;
-
-    if (field === "name") setCustomerName(value);
-    else if (field === "phone") setCustomerPhone(value);
-    else if (field === "note") setCustomerNote(value);
-
-    if (invoice) {
-      try {
-        const updated = invoice.withCustomer({
-          name: nextName,
-          phone: nextPhone,
-          note: nextNote,
-        });
-        setInvoice(updated);
-      } catch {
-        // ignore
+    const current = activeInvoice.current;
+    if (!current) return;
+    const customer = {
+      name: field === "name" ? value : customerName,
+      phone: field === "phone" ? value : customerPhone,
+      address: current.customerAddress,
+      note: field === "note" ? value : customerNote,
+    };
+    try {
+      updateInvoice(current.withCustomer(customer));
+      setCustomerName(customer.name);
+      setCustomerPhone(customer.phone);
+      setCustomerNote(customer.note);
+      customerRevision.current += 1;
+      setCustomerDirty(true);
+      if (current.status === "draft") {
+        try {
+          localStorage.setItem(
+            `smart_invoice_customer_${current.id}`,
+            JSON.stringify({ ...customer, pending: true }),
+          );
+        } catch {
+          /* SQLite persistence remains available when browser storage is disabled. */
+        }
       }
-
-      try {
-        const data = {
-          name: nextName,
-          phone: nextPhone,
-          note: nextNote,
-        };
-        localStorage.setItem(`smart_invoice_customer_${invoice.id}`, JSON.stringify(data));
-      } catch {
-        // ignore
-      }
+      if (current.status === "completed") setHasStagedChanges(true);
+    } catch {
+      setErrorMessage("Thông tin khách hàng chưa hợp lệ.");
     }
+  }
+
+  function saveCustomer() {
+    const current = activeInvoice.current;
+    if (!current || current.status !== "draft" || !customerDirty || !actions.updateInvoiceCustomer)
+      return;
+    const revision = customerRevision.current;
+    const customer = {
+      name: customerName,
+      phone: customerPhone,
+      address: current.customerAddress,
+      note: customerNote,
+    };
+    setPendingChanges((count) => count + 1);
+    const operation = changeQueue.current.then(async () => {
+      try {
+        const result = await actions.updateInvoiceCustomer!.execute({
+          invoiceId: current.id,
+          customer,
+        });
+        if (!isMounted.current || activeInvoice.current?.id !== current.id) return;
+        if (!result.ok) {
+          setErrorMessage("Chưa lưu được thông tin khách hàng. Vui lòng thử lại.");
+          return;
+        }
+        if (customerRevision.current === revision) {
+          updateInvoice(result.value);
+          setCustomerDirty(false);
+          try {
+            localStorage.removeItem(`smart_invoice_customer_${current.id}`);
+          } catch {
+            /* Legacy cache is optional. */
+          }
+        }
+        setErrorMessage(null);
+        void refreshInvoices();
+      } catch {
+        if (isMounted.current && activeInvoice.current?.id === current.id)
+          setErrorMessage("Chưa lưu được thông tin khách hàng. Vui lòng thử lại.");
+      } finally {
+        if (isMounted.current) setPendingChanges((count) => count - 1);
+      }
+    });
+    changeQueue.current = operation;
   }
 
   function handleSelectInvoice(selected: Invoice) {
@@ -286,11 +374,12 @@ export function CreateInvoiceScreen({
       setIsDraftsModalOpen(false);
       return;
     }
-    if (isSaving) {
-      setNoticeMessage("Đang lưu thay đổi, vui lòng đợi giây lát...");
+    if (isSaving || isCompleting || (customerDirty && invoice?.status === "draft")) {
+      if (!isSaving) saveCustomer();
+      setNoticeMessage("Cần lưu xong thay đổi trước khi chuyển hóa đơn.");
       return;
     }
-    setInvoice(selected);
+    resetEditor(selected);
     if (selected.status === "completed") {
       setOriginalCompletedInvoice(selected);
       setHasStagedChanges(false);
@@ -307,16 +396,21 @@ export function CreateInvoiceScreen({
   }
 
   async function handleCreateNewDraft() {
+    if (isSaving || isLoading || isCompleting) return;
+    if (customerDirty && activeInvoice.current?.status === "draft") {
+      saveCustomer();
+      return;
+    }
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      localStorage.removeItem("smart_invoice_active_draft_id");
       const result = await actions.createInvoiceDraft.execute();
+      if (!isMounted.current) return;
       if (result.ok) {
-        setInvoice(result.value);
+        resetEditor(result.value);
         setOriginalCompletedInvoice(null);
         setHasStagedChanges(false);
-        loadCustomerForInvoice(result.value.id);
+        loadCustomerForInvoice(result.value.id, result.value);
         setNoticeMessage(
           `Đã tạo bản nháp mới #${String(result.value.invoiceNumber).padStart(6, "0")}`,
         );
@@ -333,37 +427,57 @@ export function CreateInvoiceScreen({
   }
 
   async function handleDeleteDraft(target: Invoice) {
-    if (actions.deleteInvoiceDraft) {
-      await actions.deleteInvoiceDraft.execute(target.id);
-    }
+    if (!actions.deleteInvoiceDraft || deletingDraft.current || isSaving || isCompleting) return;
+    deletingDraft.current = true;
     try {
-      localStorage.removeItem(`smart_invoice_customer_${target.id}`);
-      if (localStorage.getItem("smart_invoice_active_draft_id") === target.id) {
-        localStorage.removeItem("smart_invoice_active_draft_id");
+      const result = await actions.deleteInvoiceDraft.execute(target.id);
+      if (!isMounted.current) return;
+      if (!result.ok) {
+        setErrorMessage("Không thể xóa bản nháp. Vui lòng thử lại.");
+        return;
       }
-    } catch {
-      // ignore
-    }
-
-    if (target.id === invoice?.id) {
-      const remaining = drafts.filter((d) => d.id !== target.id);
-      if (remaining.length > 0) {
-        setInvoice(remaining[0]);
-        setOriginalCompletedInvoice(null);
-        setHasStagedChanges(false);
-        loadCustomerForInvoice(remaining[0].id, remaining[0]);
-        setNoticeMessage(`Đã xóa bản nháp #${String(target.invoiceNumber).padStart(6, "0")}`);
-      } else {
-        void handleCreateNewDraft();
+      try {
+        localStorage.removeItem(`smart_invoice_customer_${target.id}`);
+        if (localStorage.getItem("smart_invoice_active_draft_id") === target.id)
+          localStorage.removeItem("smart_invoice_active_draft_id");
+      } catch {
+        /* Optional navigation preference and legacy cache. */
       }
-    } else {
+      setErrorMessage(null);
+      if (target.id === activeInvoice.current?.id) {
+        const remaining = drafts.filter((draft) => draft.id !== target.id);
+        if (remaining[0]) resetEditor(remaining[0]);
+        else {
+          activeInvoice.current = null;
+          setInvoice(null);
+          setLastRemoved(null);
+          setHasPendingInput(false);
+          setCustomerDirty(false);
+          setCustomerName("");
+          setCustomerPhone("");
+          setCustomerNote("");
+          await handleCreateNewDraft();
+        }
+      }
       setNoticeMessage(`Đã xóa bản nháp #${String(target.invoiceNumber).padStart(6, "0")}`);
+      void refreshInvoices();
+    } catch {
+      if (isMounted.current) setErrorMessage("Không thể xóa bản nháp. Vui lòng thử lại.");
+    } finally {
+      deletingDraft.current = false;
     }
-    void refreshInvoices();
   }
 
   async function handleCompleteInvoice() {
-    if (!invoice || invoice.status !== "draft" || invoice.items.length === 0) return;
+    if (
+      !invoice ||
+      invoice.status !== "draft" ||
+      invoice.items.length === 0 ||
+      isSaving ||
+      isCompleting ||
+      hasPendingInput
+    )
+      return;
     const unsaved = document.querySelector<HTMLInputElement>(
       '#invoice-workspace [data-dirty="true"]',
     );
@@ -380,15 +494,19 @@ export function CreateInvoiceScreen({
           customer: {
             name: customerName,
             phone: customerPhone,
+            address: invoice.customerAddress,
             note: customerNote,
           },
         });
+        if (!isMounted.current) return;
         if (result.ok) {
-          setInvoice(result.value);
+          updateInvoice(result.value);
+          setCustomerDirty(false);
           setOriginalCompletedInvoice(result.value);
           setHasStagedChanges(false);
           try {
             localStorage.removeItem("smart_invoice_active_draft_id");
+            localStorage.removeItem(`smart_invoice_customer_${invoice.id}`);
           } catch {
             // ignore
           }
@@ -422,7 +540,14 @@ export function CreateInvoiceScreen({
   }
 
   async function handleConfirmOverwrite() {
-    if (!invoice || invoice.status !== "completed" || !actions.overwriteCompletedInvoice) return;
+    if (
+      !invoice ||
+      invoice.status !== "completed" ||
+      !actions.overwriteCompletedInvoice ||
+      isSaving ||
+      hasPendingInput
+    )
+      return;
     setIsOverwriting(true);
     setErrorMessage(null);
     try {
@@ -433,11 +558,19 @@ export function CreateInvoiceScreen({
         customer: {
           name: customerName,
           phone: customerPhone,
+          address: invoice.customerAddress,
           note: customerNote,
         },
       });
+      if (!isMounted.current) return;
       if (result.ok) {
-        setInvoice(result.value);
+        updateInvoice(result.value);
+        setCustomerDirty(false);
+        try {
+          localStorage.removeItem(`smart_invoice_customer_${invoice.id}`);
+        } catch {
+          /* Optional legacy cache. */
+        }
         setOriginalCompletedInvoice(result.value);
         setHasStagedChanges(false);
         setIsConfirmOverwriteOpen(false);
@@ -459,7 +592,8 @@ export function CreateInvoiceScreen({
 
   function handleDiscardChanges() {
     if (originalCompletedInvoice) {
-      setInvoice(originalCompletedInvoice);
+      resetEditor(originalCompletedInvoice);
+      setGridReset((value) => value + 1);
       setHasStagedChanges(false);
       setNoticeMessage("Đã hủy các thay đổi trên hóa đơn.");
     }
@@ -468,13 +602,14 @@ export function CreateInvoiceScreen({
   // Queue semantic edits so rapid Tab entry cannot overwrite an earlier save.
   const applyChange = useCallback(
     (change: InvoiceItemChange): Promise<string | null> => {
+      const invoice = activeInvoice.current;
       if (!invoice) return Promise.resolve("Hóa đơn chưa sẵn sàng. Vui lòng thử lại.");
       if (invoice.status === "completed") {
         try {
           const now = new Date().toISOString();
           const nextItems = applyItemChangeInMemory(invoice.items, invoice.id, change, now);
           const updated = invoice.overwriteCompleted(nextItems, now);
-          setInvoice(updated);
+          updateInvoice(updated);
           setHasStagedChanges(true);
           setErrorMessage(null);
           return Promise.resolve(null);
@@ -490,14 +625,21 @@ export function CreateInvoiceScreen({
           const result = await actions.applyInvoiceItemChange.execute({
             invoiceId: invoice.id,
             change,
-            customer: {
-              name: customerName,
-              phone: customerPhone,
-              note: customerNote,
-            },
           });
+          if (!isMounted.current || activeInvoice.current?.id !== invoice.id) return null;
           if (result.ok) {
-            setInvoice(result.value);
+            const current = activeInvoice.current;
+            const next = result.value.withCustomer(
+              {
+                name: current.customerName,
+                phone: current.customerPhone,
+                address: current.customerAddress,
+                note: current.customerNote,
+              },
+              result.value.updatedAt,
+            );
+            activeInvoice.current = next;
+            setInvoice(next);
             setErrorMessage(null);
             return null;
           }
@@ -518,14 +660,14 @@ export function CreateInvoiceScreen({
       changeQueue.current = operation;
       return operation;
     },
-    [actions.applyInvoiceItemChange, invoice, customerName, customerPhone, customerNote],
+    [actions.applyInvoiceItemChange],
   );
 
   async function handleRemoveItem(itemId: string) {
     const item = invoice?.items.find((entry) => entry.id === itemId);
     if (!item) return null;
     const failure = await applyChange({ type: "remove", itemId });
-    if (!failure) {
+    if (!failure && isMounted.current && activeInvoice.current?.id === item.invoiceId) {
       setLastRemoved(item);
       setNoticeMessage(null);
       document.querySelector<HTMLInputElement>('[data-product-input="true"]')?.focus();
@@ -534,7 +676,13 @@ export function CreateInvoiceScreen({
   }
 
   const handleUndoRemove = useCallback(async () => {
-    if (!lastRemoved || isSaving || selectionPending.current) return;
+    if (
+      !lastRemoved ||
+      lastRemoved.invoiceId !== activeInvoice.current?.id ||
+      isSaving ||
+      selectionPending.current
+    )
+      return;
     selectionPending.current = true;
     const item = lastRemoved;
     const error = await applyChange({
@@ -548,6 +696,7 @@ export function CreateInvoiceScreen({
       unitPrice: item.unitPrice,
       quantity: item.quantity,
       discountBasisPoints: item.discountBasisPoints,
+      note: item.note,
     });
     selectionPending.current = false;
     if (!error) {
@@ -711,6 +860,7 @@ export function CreateInvoiceScreen({
               placeholder="Nhập tên khách hàng (VD: Anh Tuấn, Chị Mai, Khách lẻ...)"
               value={customerName}
               onChange={(e) => handleCustomerChange("name", e.target.value)}
+              onBlur={saveCustomer}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -731,6 +881,7 @@ export function CreateInvoiceScreen({
               placeholder="Số điện thoại..."
               value={customerPhone}
               onChange={(e) => handleCustomerChange("phone", e.target.value)}
+              onBlur={saveCustomer}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -751,11 +902,21 @@ export function CreateInvoiceScreen({
               placeholder="Ghi chú đơn hàng..."
               value={customerNote}
               onChange={(e) => handleCustomerChange("note", e.target.value)}
+              onBlur={saveCustomer}
             />
           </div>
         </section>
+        {invoice?.status === "draft" &&
+          customerDirty &&
+          !isSaving &&
+          actions.updateInvoiceCustomer && (
+            <button type="button" onClick={saveCustomer}>
+              Lưu thông tin khách hàng
+            </button>
+          )}
         <InvoiceLineItems
-          key={invoice?.id}
+          key={`${invoice?.id}:${gridReset}`}
+          onPendingInputChange={setHasPendingInput}
           items={invoice?.items ?? []}
           isLoading={isLoading}
           isReady={Boolean(invoice)}
@@ -785,7 +946,7 @@ export function CreateInvoiceScreen({
                 <button
                   type="button"
                   className="primary-button btn-save-overwrite"
-                  disabled={isSaving || !invoice.items.length || Boolean(errorMessage)}
+                  disabled={isSaving || !invoice.items.length || hasPendingInput}
                   onClick={() => setIsConfirmOverwriteOpen(true)}
                 >
                   <InvoiceIcon name="check" size={16} />
@@ -825,7 +986,7 @@ export function CreateInvoiceScreen({
                   !invoice?.items.length ||
                   isSaving ||
                   isCompleting ||
-                  Boolean(errorMessage)
+                  hasPendingInput
                 }
                 aria-describedby={
                   !actions.completeInvoice && !onCompleteInvoice
@@ -860,9 +1021,7 @@ export function CreateInvoiceScreen({
                 <div className="drafts-modal-title-wrap">
                   <InvoiceIcon name="receipt" size={18} />
                   <h2 id="drafts-modal-title">Bản nháp đã lưu</h2>
-                  {drafts.length > 0 && (
-                    <span className="drafts-modal-badge">{drafts.length}</span>
-                  )}
+                  {drafts.length > 0 && <span className="drafts-modal-badge">{drafts.length}</span>}
                 </div>
                 <div className="drafts-modal-actions">
                   <button
@@ -907,9 +1066,7 @@ export function CreateInvoiceScreen({
                                 #{String(d.invoiceNumber).padStart(6, "0")}
                               </span>
                               {isCurrent && <span className="draft-current-tag">Đang mở</span>}
-                              <span className="draft-time">
-                                {formatRelativeTime(d.updatedAt)}
-                              </span>
+                              <span className="draft-time">{formatRelativeTime(d.updatedAt)}</span>
                             </div>
                             <div className="draft-card-details">
                               <span className="draft-customer-name">
@@ -1018,11 +1175,12 @@ export function CreateInvoiceScreen({
           customer={{
             name: customerName,
             phone: customerPhone,
+            address: invoice?.customerAddress ?? undefined,
             note: customerNote,
           }}
           isOpen={isReceiptModalOpen}
           onClose={() => setIsReceiptModalOpen(false)}
-          onPrint={() => void handlePrintReceipt()}
+          onConfirmPrinted={actions.markInvoicePrinted ? handleConfirmPrinted : undefined}
           onNewDraft={() => {
             setIsReceiptModalOpen(false);
             void handleCreateNewDraft();
@@ -1032,26 +1190,33 @@ export function CreateInvoiceScreen({
     </div>
   );
 
-  async function handlePrintReceipt() {
-    if (invoice && actions.markInvoicePrinted && !invoice.isPrinted) {
-      try {
-        const result = await actions.markInvoicePrinted.execute({ invoiceId: invoice.id });
-        if (result.ok) {
-          setInvoice((prev) => (prev ? prev.markPrinted() : null));
-          void refreshInvoices();
-        }
-      } catch {
-        // ignore
+  async function handleConfirmPrinted(): Promise<string | null> {
+    const current = activeInvoice.current;
+    if (!current || !actions.markInvoicePrinted) return "Hóa đơn chưa sẵn sàng.";
+    if (current.isPrinted) return null;
+    const printedAt = new Date().toISOString();
+    try {
+      const result = await actions.markInvoicePrinted.execute({ invoiceId: current.id, printedAt });
+      if (!result.ok) return "Chưa lưu được trạng thái đã in. Vui lòng thử lại.";
+      if (isMounted.current && activeInvoice.current?.id === current.id) {
+        updateInvoice(activeInvoice.current.markPrinted(printedAt));
+        setOriginalCompletedInvoice((previous) =>
+          previous?.id === current.id ? previous.markPrinted(printedAt) : previous,
+        );
+        void refreshInvoices();
       }
+      return null;
+    } catch {
+      return "Chưa lưu được trạng thái đã in. Vui lòng thử lại.";
     }
-    window.print();
   }
 }
 
 function getSavedCustomer(
   invoiceId: string,
   inv?: Invoice | null,
-): { name?: string; phone?: string; note?: string } | null {
+  pendingOnly = false,
+): { name?: string; phone?: string; address?: string; note?: string } | null {
   if (inv && (inv.customerName || inv.customerPhone || inv.customerNote)) {
     return {
       name: inv.customerName ?? undefined,
@@ -1061,7 +1226,23 @@ function getSavedCustomer(
   }
   try {
     const raw = localStorage.getItem(`smart_invoice_customer_${invoiceId}`);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const fields = parsed as Record<string, unknown>;
+    if (pendingOnly && fields.pending !== true) return null;
+    if (
+      ["name", "phone", "address", "note"].some(
+        (key) => fields[key] != null && typeof fields[key] !== "string",
+      )
+    )
+      return null;
+    return {
+      name: typeof fields.name === "string" ? fields.name : undefined,
+      phone: typeof fields.phone === "string" ? fields.phone : undefined,
+      address: typeof fields.address === "string" ? fields.address : undefined,
+      note: typeof fields.note === "string" ? fields.note : undefined,
+    };
   } catch {
     return null;
   }

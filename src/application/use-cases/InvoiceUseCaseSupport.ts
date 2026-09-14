@@ -5,6 +5,31 @@ import type { InvoiceRepository } from "../repositories/InvoiceRepository";
 import { err, ok, type Result } from "../shared/Result";
 import type { Invoice } from "../../domain/entities/Invoice";
 
+const draftChanges = new WeakMap<InvoiceRepository, Map<string, Promise<unknown>>>();
+
+// Editor sessions may unmount while saving. Serialize the full read/edit/write
+// operation across those sessions, and release each queue when its final edit settles.
+export function serializeDraftChange<T>(
+  repository: InvoiceRepository,
+  invoiceId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  let queues = draftChanges.get(repository);
+  if (!queues) {
+    queues = new Map();
+    draftChanges.set(repository, queues);
+  }
+  const queue = queues;
+  const previous = queue.get(invoiceId) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  queue.set(invoiceId, current);
+  const release = () => {
+    if (queue.get(invoiceId) === current) queue.delete(invoiceId);
+  };
+  void current.then(release, release);
+  return current;
+}
+
 export async function loadInvoice(
   repository: InvoiceRepository,
   invoiceId: string,

@@ -17,5 +17,5 @@ export interface ProductSearchIndex {
   removeProduct(productId: string): void;
   upsertAlias(alias: ProductAlias): void;
   removeAlias(aliasId: string): void;
-  search(query: string, limit: number): readonly ProductSearchCandidate[];
+  search(query: string, limit: number, exactIdOnly?: boolean): readonly ProductSearchCandidate[];
 }

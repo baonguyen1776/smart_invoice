@@ -105,7 +105,11 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
     const missing = items.filter((item) => !order.includes(item.id)).map((item) => item.id);
     setOrder((current) => {
       const trailing = current[current.length - 1];
-      const retained = current.slice(0, -1).filter((id) => itemIds.has(id));
+      const retained = current
+        .slice(0, -1)
+        .filter(
+          (id) => itemIds.has(id) || (!savedIds.current.has(id) && Boolean(draftRef.current[id])),
+        );
       return [...retained, ...missing, trailing];
     });
   }
@@ -210,6 +214,7 @@ export function useInvoiceGrid({ items, onCommit, onRemove }: UseInvoiceGridInpu
     });
   }
   return {
+    hasPendingInput: Object.keys(drafts).length > 0 || saving.size > 0,
     rows: order.map((id, index) => ({
       id,
       number: index + 1,

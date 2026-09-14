@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Invoice } from "../../domain/entities/Invoice";
 import { InvoiceItem } from "../../domain/entities/InvoiceItem";
@@ -385,5 +385,79 @@ describe("InvoiceReceiptPreviewModal", () => {
     render(<InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />);
 
     expect(screen.getAllByText("(180.000)").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("Print result confirmation", () => {
+  function receipt() {
+    return makeSampleInvoice([makeItem(ITEM_ID_1, PROD_ID_1, UNIT_ID_1, "Coffee", "Can", 1, 5000)]);
+  }
+
+  it("does not record a cancelled print and confirms only after an explicit success action", async () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => {});
+    const confirm = vi.fn(async () => null);
+    render(
+      <InvoiceReceiptPreviewModal
+        invoice={receipt()}
+        isOpen
+        onClose={vi.fn()}
+        onConfirmPrinted={confirm}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Đã hủy / Chưa in" }));
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Đã in thành công" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    print.mockRestore();
+  });
+
+  it("does not offer success confirmation if opening the print dialog fails", () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => {
+      throw new Error("unavailable");
+    });
+    const confirm = vi.fn(async () => null);
+    render(
+      <InvoiceReceiptPreviewModal
+        invoice={receipt()}
+        isOpen
+        onClose={vi.fn()}
+        onConfirmPrinted={confirm}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Không thể mở hộp thoại in");
+    expect(screen.queryByRole("button", { name: "Đã in thành công" })).toBeNull();
+    expect(confirm).not.toHaveBeenCalled();
+    print.mockRestore();
+  });
+
+  it("allows retrying a failed status write without printing a duplicate receipt", async () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => {});
+    const confirm = vi
+      .fn<() => Promise<string | null>>()
+      .mockResolvedValueOnce("Chưa lưu được trạng thái.")
+      .mockResolvedValueOnce(null);
+    render(
+      <InvoiceReceiptPreviewModal
+        invoice={receipt()}
+        isOpen
+        onClose={vi.fn()}
+        onConfirmPrinted={confirm}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Đã in thành công" }));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Đã in thành công" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("group", { name: "Xác nhận kết quả in" })).toBeNull(),
+    );
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(print).toHaveBeenCalledTimes(1);
+    print.mockRestore();
   });
 });

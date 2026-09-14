@@ -21,6 +21,8 @@ import { SQLiteProductRepository } from "./infrastructure/repositories/SQLitePro
 import { FuseProductSearchIndex } from "./infrastructure/search/FuseProductSearchIndex";
 import { SystemClock } from "./infrastructure/system/SystemClock";
 import { WebCryptoIdGenerator } from "./infrastructure/system/WebCryptoIdGenerator";
+import { UpdateInvoiceCustomer } from "./application/use-cases/UpdateInvoiceCustomer";
+import { ProductSearchStartup } from "./presentation/components/ProductSearchStartup";
 import { App } from "./presentation/App";
 
 const rootElement = document.getElementById("root");
@@ -36,26 +38,20 @@ const searchIndex = new FuseProductSearchIndex();
 const clock = new SystemClock();
 const idGenerator = new WebCryptoIdGenerator();
 
-const searchLoad = await new LoadProductSearchIndex(
-  repository,
-  aliasRepository,
-  searchIndex,
-).execute();
-if (!searchLoad.ok) {
-  console.error("Product search index failed to initialize.");
-}
+const searchLoader = new LoadProductSearchIndex(repository, aliasRepository, searchIndex);
 
 const productActions = {
   createProduct: new CreateProduct(repository, idGenerator, clock, searchIndex),
   updateProduct: new UpdateProduct(repository, idGenerator, clock, searchIndex),
   deactivateProduct: new DeactivateProduct(repository, clock, searchIndex),
-  reactivateProduct: new ReactivateProduct(repository, clock, searchIndex),
+  reactivateProduct: new ReactivateProduct(repository, clock, searchIndex, aliasRepository),
   listProducts: new ListProducts(repository),
 };
 
 const invoiceActions = {
   createInvoiceDraft: new CreateInvoiceDraft(invoiceRepository, idGenerator, clock),
   restoreInvoiceDraft: new RestoreInvoiceDraft(invoiceRepository, idGenerator, clock),
+  updateInvoiceCustomer: new UpdateInvoiceCustomer(invoiceRepository, clock),
   applyInvoiceItemChange: new ApplyInvoiceItemChange(invoiceRepository, idGenerator, clock),
   searchProducts: new SearchProducts(searchIndex),
   listInvoices: new ListInvoices(invoiceRepository),
@@ -67,6 +63,8 @@ const invoiceActions = {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App productActions={productActions} invoiceActions={invoiceActions} />
+    <ProductSearchStartup loader={searchLoader}>
+      <App productActions={productActions} invoiceActions={invoiceActions} />
+    </ProductSearchStartup>
   </StrictMode>,
 );

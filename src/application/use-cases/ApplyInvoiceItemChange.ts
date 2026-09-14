@@ -5,7 +5,7 @@ import type { Clock } from "../ports/Clock";
 import type { IdGenerator } from "../ports/IdGenerator";
 import type { InvoiceRepository } from "../repositories/InvoiceRepository";
 import { err, ok, type Result } from "../shared/Result";
-import { loadInvoice, mapInvoiceDomainError } from "./InvoiceUseCaseSupport";
+import { loadInvoice, mapInvoiceDomainError, serializeDraftChange } from "./InvoiceUseCaseSupport";
 
 interface AddItemChange {
   readonly type: "add";
@@ -70,7 +70,11 @@ export class ApplyInvoiceItemChange {
     private readonly clock: Clock,
   ) {}
 
-  async execute(input: ApplyInvoiceItemChangeInput): Promise<Result<Invoice, InvoiceError>> {
+  execute(input: ApplyInvoiceItemChangeInput): Promise<Result<Invoice, InvoiceError>> {
+    return serializeDraftChange(this.repository, input.invoiceId, () => this.apply(input));
+  }
+
+  private async apply(input: ApplyInvoiceItemChangeInput): Promise<Result<Invoice, InvoiceError>> {
     const loaded = await loadInvoice(this.repository, input.invoiceId);
     if (!loaded.ok) return loaded;
 

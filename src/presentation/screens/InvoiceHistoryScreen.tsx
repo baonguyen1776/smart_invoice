@@ -30,6 +30,8 @@ export function InvoiceHistoryScreen({
 }: InvoiceHistoryScreenProps) {
   const [invoices, setInvoices] = useState<readonly Invoice[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequest = useRef(0);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [filterPreset, setFilterPreset] = useState<DateFilterPreset>("all");
   const [customDate, setCustomDate] = useState<Date | null>(null);
@@ -44,29 +46,39 @@ export function InvoiceHistoryScreen({
   const dateFilterBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // Tải danh sách hóa đơn đã hoàn tất
-  const fetchInvoices = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const result = await actions.listInvoices.execute({ status: "completed" });
-      if (result.ok) {
-        // Sắp xếp hóa đơn mới nhất lên đầu, trùng thời gian thì mã HĐ lớn hơn lên trước
-        const sorted = [...result.value].sort((a, b) => {
-          const timeA = new Date(a.completedAt || a.createdAt).getTime();
-          const timeB = new Date(b.completedAt || b.createdAt).getTime();
-          if (timeB !== timeA) return timeB - timeA;
-          return b.invoiceNumber - a.invoiceNumber;
-        });
-        setInvoices(sorted);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
-    }
+  const fetchInvoices = useCallback(() => {
+    const request = ++loadRequest.current;
+    return Promise.resolve()
+      .then(() => actions.listInvoices.execute({ status: "completed" }))
+      .then((result) => {
+        if (request !== loadRequest.current) return;
+        if (!result.ok) {
+          setLoadError("Không thể tải lịch sử hóa đơn. Vui lòng thử lại.");
+          return;
+        }
+        setLoadError(null);
+        setInvoices(
+          [...result.value].sort((a, b) => {
+            const timeA = new Date(a.completedAt || a.createdAt).getTime();
+            const timeB = new Date(b.completedAt || b.createdAt).getTime();
+            return timeB - timeA || b.invoiceNumber - a.invoiceNumber;
+          }),
+        );
+      })
+      .catch(() => {
+        if (request === loadRequest.current)
+          setLoadError("Không thể tải lịch sử hóa đơn. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        if (request === loadRequest.current) setIsLoading(false);
+      });
   }, [actions.listInvoices]);
 
   useEffect(() => {
     void fetchInvoices();
+    return () => {
+      loadRequest.current += 1;
+    };
   }, [fetchInvoices]);
 
   // Đóng calendar khi click ngoài hoặc nhấn Escape
@@ -162,26 +174,24 @@ export function InvoiceHistoryScreen({
   }, [invoices, searchQuery, filterPreset, customDate]);
 
   // Xử lý in hóa đơn từ preview modal
-  const handlePrintReceipt = useCallback(async () => {
-    if (!selectedInvoice) return;
+  const handleConfirmPrinted = useCallback(async (): Promise<string | null> => {
+    if (!selectedInvoice || !actions.markInvoicePrinted) return "Hóa đơn chưa sẵn sàng.";
+    if (selectedInvoice.isPrinted) return null;
     const invoiceId = selectedInvoice.id;
-
-    if (actions.markInvoicePrinted && !selectedInvoice.isPrinted) {
-      try {
-        const result = await actions.markInvoicePrinted.execute({ invoiceId });
-        if (result.ok) {
-          const updated = selectedInvoice.markPrinted();
-          setSelectedInvoice(updated);
-          setInvoices((prev) =>
-            prev.map((item) => (item.id === invoiceId ? item.markPrinted() : item)),
-          );
-        }
-      } catch {
-        // ignore
-      }
+    const printedAt = new Date().toISOString();
+    try {
+      const result = await actions.markInvoicePrinted.execute({ invoiceId, printedAt });
+      if (!result.ok) return "Chưa lưu được trạng thái đã in. Vui lòng thử lại.";
+      setSelectedInvoice((current) =>
+        current?.id === invoiceId ? current.markPrinted(printedAt) : current,
+      );
+      setInvoices((current) =>
+        current.map((item) => (item.id === invoiceId ? item.markPrinted(printedAt) : item)),
+      );
+      return null;
+    } catch {
+      return "Chưa lưu được trạng thái đã in. Vui lòng thử lại.";
     }
-
-    window.print();
   }, [selectedInvoice, actions.markInvoicePrinted]);
 
   // Xử lý chuyển sang sửa hóa đơn
@@ -253,15 +263,11 @@ export function InvoiceHistoryScreen({
   }
 
   function handlePrevMonth() {
-    setCalendarViewDate(
-      (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1),
-    );
+    setCalendarViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
   }
 
   function handleNextMonth() {
-    setCalendarViewDate(
-      (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1),
-    );
+    setCalendarViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   }
 
   return (
@@ -453,16 +459,12 @@ export function InvoiceHistoryScreen({
                         <span className="customer-phone-sub">{customer.phone}</span>
                       )}
                     </td>
-                    <td
-                      className={`col-invoice-amount ${inv.total < 0 ? "is-negative" : ""}`}
-                    >
+                    <td className={`col-invoice-amount ${inv.total < 0 ? "is-negative" : ""}`}>
                       {formatCurrency(inv.total)}
                     </td>
                     <td style={{ textAlign: "center" }}>
                       <span
-                        className={`history-badge-pill ${
-                          inv.isPrinted ? "printed" : "unprinted"
-                        }`}
+                        className={`history-badge-pill ${inv.isPrinted ? "printed" : "unprinted"}`}
                       >
                         {inv.isPrinted ? "Đã in" : "Chưa in"}
                       </span>
@@ -485,7 +487,21 @@ export function InvoiceHistoryScreen({
           )}
 
           {/* Empty State */}
-          {!isLoading && filteredInvoices.length === 0 && (
+          {loadError && (
+            <div role="alert">
+              <p>{loadError}</p>
+              <button
+                disabled={isLoading}
+                onClick={() => {
+                  setIsLoading(true);
+                  void fetchInvoices();
+                }}
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
+          {!isLoading && !loadError && filteredInvoices.length === 0 && (
             <div className="history-empty-state">
               <div className="history-empty-icon">
                 <InvoiceIcon name="history" size={28} />
@@ -519,7 +535,7 @@ export function InvoiceHistoryScreen({
         }
         isOpen={isReceiptOpen}
         onClose={() => setIsReceiptOpen(false)}
-        onPrint={() => void handlePrintReceipt()}
+        onConfirmPrinted={actions.markInvoicePrinted ? handleConfirmPrinted : undefined}
         onEdit={
           onSelectInvoiceForEdit && selectedInvoice
             ? () => handleEditInvoice(selectedInvoice)
@@ -538,7 +554,7 @@ export interface ResolvedCustomerInfo {
   readonly note?: string | null;
 }
 
-export function getInvoiceCustomer(inv: Invoice): ResolvedCustomerInfo {
+function getInvoiceCustomer(inv: Invoice): ResolvedCustomerInfo {
   if (inv.customerName && inv.customerName.trim().length > 0) {
     return {
       name: inv.customerName.trim(),

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Invoice } from "../../domain/entities/Invoice";
 import type { InvoiceItem } from "../../domain/entities/InvoiceItem";
-import { sumInvoiceAmounts } from "../../domain/rules/CalculateInvoiceAmounts";
+import { sumInvoiceAmountsExact } from "../../domain/rules/CalculateInvoiceAmounts";
+import { formatInvoiceAmount } from "../formatters/FormatInvoiceAmount";
 import { InvoiceIcon } from "./InvoiceIcon";
 import "./InvoiceReceiptPreviewModal.css";
 
@@ -18,6 +19,7 @@ export interface InvoiceReceiptPreviewModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
   readonly onPrint?: () => void;
+  readonly onConfirmPrinted?: () => Promise<string | null>;
   readonly onNewDraft?: () => void;
   readonly onEdit?: () => void;
 }
@@ -34,36 +36,70 @@ interface InvoiceReceiptPage {
   readonly emptyRowsCount: number;
   readonly isFirstPage: boolean;
   readonly isLastPage: boolean;
-  readonly pageSubtotal: number;
-  readonly pageDiscount: number;
-  readonly pagePayment: number;
+  readonly pageSubtotal: bigint;
+  readonly pageDiscount: bigint;
+  readonly pagePayment: bigint;
 }
 
-export function InvoiceReceiptPreviewModal({
+export function InvoiceReceiptPreviewModal(props: InvoiceReceiptPreviewModalProps) {
+  if (!props.isOpen || !props.invoice) return null;
+  return <ReceiptPreviewContent key={props.invoice.id} {...props} invoice={props.invoice} />;
+}
+
+function ReceiptPreviewContent({
   invoice,
   customer,
   isOpen,
   onClose,
   onPrint,
+  onConfirmPrinted,
   onNewDraft,
   onEdit,
-}: InvoiceReceiptPreviewModalProps) {
+}: InvoiceReceiptPreviewModalProps & { readonly invoice: Invoice }) {
+  const [awaitingPrintConfirmation, setAwaitingPrintConfirmation] = useState(false);
+  const [isMarkingPrinted, setIsMarkingPrinted] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const printBusy = useRef(false);
   const [includeStoreHeader, setIncludeStoreHeader] = useState<boolean>(true);
 
   const totals = useMemo(() => {
     if (!invoice || invoice.items.length === 0) {
-      return { subtotal: 0, discountAmount: 0, payment: 0 };
+      return { subtotal: 0n, discountAmount: 0n, payment: 0n };
     }
-    return sumInvoiceAmounts(invoice.items);
+    return sumInvoiceAmountsExact(invoice.items);
   }, [invoice]);
 
   const handlePrint = useCallback(() => {
-    if (onPrint) {
-      onPrint();
-    } else {
-      window.print();
+    if (printBusy.current || awaitingPrintConfirmation) return;
+    printBusy.current = true;
+    setPrintError(null);
+    try {
+      if (onPrint) onPrint();
+      else window.print();
+      if (onConfirmPrinted) setAwaitingPrintConfirmation(true);
+    } catch {
+      setPrintError("Không thể mở hộp thoại in. Vui lòng thử lại.");
+    } finally {
+      printBusy.current = false;
     }
-  }, [onPrint]);
+  }, [onPrint, onConfirmPrinted, awaitingPrintConfirmation]);
+
+  async function confirmPrinted() {
+    if (!onConfirmPrinted || printBusy.current) return;
+    printBusy.current = true;
+    setIsMarkingPrinted(true);
+    setPrintError(null);
+    try {
+      const failure = await onConfirmPrinted();
+      if (failure) setPrintError(failure);
+      else setAwaitingPrintConfirmation(false);
+    } catch {
+      setPrintError("Chưa lưu được trạng thái đã in. Vui lòng thử lại.");
+    } finally {
+      printBusy.current = false;
+      setIsMarkingPrinted(false);
+    }
+  }
 
   useEffect(() => {
     if (!isOpen) return;
@@ -94,7 +130,7 @@ export function InvoiceReceiptPreviewModal({
   }, [isOpen, onClose, onNewDraft, handlePrint]);
 
   const pages = useMemo<readonly InvoiceReceiptPage[]>(() => {
-    if (!invoice) return [];
+    if (!isOpen || !invoice) return [];
     const allItems = invoice.items;
     const totalCount = allItems.length;
 
@@ -129,7 +165,7 @@ export function InvoiceReceiptPreviewModal({
       const pageItems = allItems.slice(start, start + MULTI_PAGE_ITEMS_PER_PAGE);
       const emptyCount = Math.max(0, MULTI_PAGE_ITEMS_PER_PAGE - pageItems.length);
 
-      const pageTotals = sumInvoiceAmounts(pageItems);
+      const pageTotals = sumInvoiceAmountsExact(pageItems);
 
       result.push({
         pageNumber,
@@ -146,7 +182,7 @@ export function InvoiceReceiptPreviewModal({
     }
 
     return result;
-  }, [invoice, totals]);
+  }, [invoice, totals, isOpen]);
 
   if (!isOpen || !invoice) {
     return null;
@@ -224,6 +260,7 @@ export function InvoiceReceiptPreviewModal({
               type="button"
               className="primary-button btn-receipt-print"
               onClick={handlePrint}
+              disabled={awaitingPrintConfirmation || isMarkingPrinted}
               title="In hóa đơn (Enter)"
             >
               <InvoiceIcon name="receipt" size={15} />
@@ -240,6 +277,39 @@ export function InvoiceReceiptPreviewModal({
           </div>
         </header>
 
+        {printError && (
+          <p className="no-print" role="alert">
+            {printError}
+          </p>
+        )}
+        {awaitingPrintConfirmation && (
+          <div
+            className="receipt-print-confirmation no-print"
+            role="group"
+            aria-label="Xác nhận kết quả in"
+          >
+            <p>Phiếu đã được in thành công chưa?</p>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isMarkingPrinted}
+              onClick={() => {
+                setAwaitingPrintConfirmation(false);
+                setPrintError(null);
+              }}
+            >
+              Đã hủy / Chưa in
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={isMarkingPrinted}
+              onClick={() => void confirmPrinted()}
+            >
+              {isMarkingPrinted ? "Đang lưu trạng thái…" : "Đã in thành công"}
+            </button>
+          </div>
+        )}
         <div className="receipt-paper-scroll">
           {pages.map((page) => {
             const isCompact =
@@ -336,18 +406,18 @@ export function InvoiceReceiptPreviewModal({
                         <td className="td-unit">{item.unitName}</td>
                         <td className="td-qty">{item.quantity}</td>
                         <td className="td-price">{item.unitPrice.toLocaleString("vi-VN")}</td>
-                        <td className="td-subtotal">{item.subtotal.toLocaleString("vi-VN")}</td>
+                        <td className="td-subtotal">{formatInvoiceAmount(item.subtotal)}</td>
                         <td className="td-ck">
                           {item.discountBasisPoints > 0
                             ? `${item.discountBasisPoints / 100}%`
                             : "-"}
                         </td>
                         <td className="td-ck-amount">
-                          {item.discountAmount > 0
-                            ? item.discountAmount.toLocaleString("vi-VN")
+                          {item.discountAmount !== 0
+                            ? formatInvoiceAmount(item.discountAmount)
                             : "-"}
                         </td>
-                        <td className="td-payment">{item.payment.toLocaleString("vi-VN")}</td>
+                        <td className="td-payment">{formatInvoiceAmount(item.payment)}</td>
                       </tr>
                     ))}
 
@@ -376,22 +446,14 @@ export function InvoiceReceiptPreviewModal({
                           : `Cộng chuyển trang sau (Trang ${page.pageNumber}/${page.totalPages})`}
                       </td>
                       <td className="td-subtotal td-total-subtotal">
-                        {page.pageSubtotal !== 0
-                          ? page.pageSubtotal < 0
-                            ? `(${Math.abs(page.pageSubtotal).toLocaleString("vi-VN")})`
-                            : page.pageSubtotal.toLocaleString("vi-VN")
-                          : "-"}
+                        {page.pageSubtotal !== 0n ? formatInvoiceAmount(page.pageSubtotal) : "-"}
                       </td>
                       <td className="td-ck-white" />
                       <td className="td-ck-amount td-total-ck">
-                        {page.pageDiscount > 0 ? page.pageDiscount.toLocaleString("vi-VN") : "-"}
+                        {page.pageDiscount !== 0n ? formatInvoiceAmount(page.pageDiscount) : "-"}
                       </td>
                       <td className="td-payment td-total-payment">
-                        {page.pagePayment !== 0
-                          ? page.pagePayment < 0
-                            ? `(${Math.abs(page.pagePayment).toLocaleString("vi-VN")})`
-                            : page.pagePayment.toLocaleString("vi-VN")
-                          : "-"}
+                        {page.pagePayment !== 0n ? formatInvoiceAmount(page.pagePayment) : "-"}
                       </td>
                     </tr>
                   </tfoot>

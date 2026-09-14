@@ -10,9 +10,7 @@ export interface MarkInvoicePrintedInput {
 export class MarkInvoicePrinted {
   constructor(private readonly repository: InvoiceRepository) {}
 
-  async execute(
-    input: MarkInvoicePrintedInput,
-  ): Promise<Result<void, InvoicePersistenceFailure>> {
+  async execute(input: MarkInvoicePrintedInput): Promise<Result<void, InvoicePersistenceFailure>> {
     const printedAt = input.printedAt ?? new Date().toISOString();
     return this.repository.markPrinted(input.invoiceId, printedAt);
   }
