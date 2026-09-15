@@ -1413,3 +1413,45 @@ fn deleting_a_draft_cascades_its_items_and_rejects_a_missing_id() {
         assert!(delete_draft(&pool, INVOICE_ID).await.is_err());
     });
 }
+
+#[test]
+fn old_debt_migrates_and_persists_through_invoice_lifecycle() {
+    use sqlx::migrate::Migrate;
+    tauri::async_runtime::block_on(async {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1)
+            .connect_with(connection_options().in_memory(true)).await.unwrap();
+        {
+            let mut connection = pool.acquire().await.unwrap();
+            connection.ensure_migrations_table().await.unwrap();
+            for migration in sqlx::migrate!("./migrations").iter().filter(|migration| migration.version < 8) {
+                connection.apply(migration).await.unwrap();
+            }
+        }
+        save_product(&pool, product(PRODUCT_ID, UNIT_ID, None), "create", true).await.unwrap();
+        insert_invoice_draft(&pool, CreateInvoiceDraftInput { id: INVOICE_ID.into(), created_at: NOW.into() }).await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let mut invoice = fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap();
+        assert_eq!(invoice.old_debt, 0);
+        invoice.items = vec![invoice_item(ITEM_ID, INVOICE_ID, PRODUCT_ID, UNIT_ID)];
+        invoice.total = invoice.items[0].subtotal;
+        invoice.old_debt = 50_000;
+        persist_draft_items_and_total(&pool, invoice.clone()).await.unwrap();
+        assert_eq!(fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap().old_debt, 50_000);
+        invoice.status = "completed".into();
+        invoice.completed_at = Some(NOW.into());
+        persist_completed_invoice(&pool, invoice.clone()).await.unwrap();
+        invoice.old_debt = 75_000;
+        persist_overwrite_completed(&pool, invoice.clone()).await.unwrap();
+        assert_eq!(fetch_invoices(&pool, None).await.unwrap()[0].old_debt, 75_000);
+        for value in ["-1", "0.5", "9007199254740992", "9007199254740991"] {
+            assert!(sqlx::query(&format!("UPDATE invoices SET old_debt = {value} WHERE id = ?")).bind(INVOICE_ID).execute(&pool).await.is_err());
+        }
+        invoice.old_debt = -1;
+        assert!(persist_overwrite_completed(&pool, invoice.clone()).await.is_err());
+        assert_eq!(fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap().old_debt, 75_000);
+        invoice.old_debt = 0;
+        persist_overwrite_completed(&pool, invoice).await.unwrap();
+        assert_eq!(fetch_invoice(&pool, INVOICE_ID).await.unwrap().unwrap().old_debt, 0);
+        pool.close().await;
+    });
+}

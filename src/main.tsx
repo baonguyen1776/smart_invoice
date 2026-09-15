@@ -21,6 +21,7 @@ import { SQLiteProductRepository } from "./infrastructure/repositories/SQLitePro
 import { FuseProductSearchIndex } from "./infrastructure/search/FuseProductSearchIndex";
 import { SystemClock } from "./infrastructure/system/SystemClock";
 import { WebCryptoIdGenerator } from "./infrastructure/system/WebCryptoIdGenerator";
+import { UpdateInvoiceOldDebt } from "./application/use-cases/UpdateInvoiceOldDebt";
 import { UpdateInvoiceCustomer } from "./application/use-cases/UpdateInvoiceCustomer";
 import { ProductSearchStartup } from "./presentation/components/ProductSearchStartup";
 import { App } from "./presentation/App";
@@ -51,6 +52,7 @@ const productActions = {
 const invoiceActions = {
   createInvoiceDraft: new CreateInvoiceDraft(invoiceRepository, idGenerator, clock),
   restoreInvoiceDraft: new RestoreInvoiceDraft(invoiceRepository, idGenerator, clock),
+  updateInvoiceOldDebt: new UpdateInvoiceOldDebt(invoiceRepository, clock),
   updateInvoiceCustomer: new UpdateInvoiceCustomer(invoiceRepository, clock),
   applyInvoiceItemChange: new ApplyInvoiceItemChange(invoiceRepository, idGenerator, clock),
   searchProducts: new SearchProducts(searchIndex),

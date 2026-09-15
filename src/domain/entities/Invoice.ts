@@ -10,6 +10,7 @@ export interface InvoiceState {
   readonly invoiceNumber: number;
   readonly status: InvoiceStatus;
   readonly total: number;
+  readonly oldDebt?: number;
   readonly customerName?: string | null;
   readonly customerPhone?: string | null;
   readonly customerAddress?: string | null;
@@ -44,6 +45,7 @@ export class Invoice {
   readonly invoiceNumber: number;
   readonly status: InvoiceStatus;
   readonly total: number;
+  readonly oldDebt: number;
   readonly customerName: string | null;
   readonly customerPhone: string | null;
   readonly customerAddress: string | null;
@@ -60,6 +62,7 @@ export class Invoice {
     this.invoiceNumber = state.invoiceNumber;
     this.status = state.status;
     this.total = state.total;
+    this.oldDebt = state.oldDebt ?? 0;
     this.customerName = state.customerName ?? null;
     this.customerPhone = state.customerPhone ?? null;
     this.customerAddress = state.customerAddress ?? null;
@@ -120,6 +123,14 @@ export class Invoice {
     });
   }
 
+  withOldDebt(oldDebt: number, updatedAt: string): Invoice {
+    return Invoice.fromState({ ...this.toState(), oldDebt, updatedAt });
+  }
+
+  get finalTotal(): number {
+    return this.total + this.oldDebt;
+  }
+
   markPrinted(printedAt: string = new Date().toISOString()): Invoice {
     validateTimestamp(printedAt, "printedAt");
     return Invoice.fromState({
@@ -147,7 +158,11 @@ export class Invoice {
     });
   }
 
-  overwriteCompleted(items: readonly InvoiceItem[], updatedAt: string): Invoice {
+  overwriteCompleted(
+    items: readonly InvoiceItem[],
+    updatedAt: string,
+    oldDebt = this.oldDebt,
+  ): Invoice {
     if (this.status !== "completed") {
       throw new InvoiceValidationError("Only a completed Invoice can be overwritten.");
     }
@@ -160,6 +175,7 @@ export class Invoice {
       ...this.toState(),
       items,
       total: calculateTotal(items),
+      oldDebt,
       updatedAt,
     });
   }
@@ -170,6 +186,7 @@ export class Invoice {
       invoiceNumber: this.invoiceNumber,
       status: this.status,
       total: this.total,
+      oldDebt: this.oldDebt,
       customerName: this.customerName,
       customerPhone: this.customerPhone,
       customerAddress: this.customerAddress,
@@ -201,6 +218,13 @@ export class Invoice {
     validateItems(state.id, state.items);
 
     const total = calculateTotal(state.items);
+    const oldDebt = state.oldDebt ?? 0;
+    if (!Number.isSafeInteger(oldDebt) || oldDebt < 0) {
+      throw new InvoiceValidationError("Old debt must be a non-negative safe integer in VND.");
+    }
+    if (BigInt(total) + BigInt(oldDebt) > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new InvoiceValidationError("Final total exceeds the safe integer range.");
+    }
     if (state.status === "completed" && state.total !== total) {
       throw new InvoiceValidationError("total must equal the sum of item payments.");
     }

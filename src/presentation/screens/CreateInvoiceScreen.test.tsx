@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { err, ok } from "../../application/shared/Result";
+import { UpdateInvoiceOldDebt } from "../../application/use-cases/UpdateInvoiceOldDebt";
+import { CompleteInvoice } from "../../application/use-cases/CompleteInvoice";
+import { OverwriteCompletedInvoice } from "../../application/use-cases/OverwriteCompletedInvoice";
 import { UpdateInvoiceCustomer } from "../../application/use-cases/UpdateInvoiceCustomer";
 import { ApplyInvoiceItemChange } from "../../application/use-cases/ApplyInvoiceItemChange";
 import { InMemoryInvoiceRepository } from "../../test/doubles/InMemoryInvoiceRepository";
@@ -135,6 +138,7 @@ function makeActions(initialInvoice = makeDraftInvoice()) {
   );
   const actions: InvoiceScreenActions = {
     createInvoiceDraft: { execute: vi.fn(async () => ok(initialInvoice)) },
+    updateInvoiceOldDebt: new UpdateInvoiceOldDebt(repository, { now: () => NOW }),
     updateInvoiceCustomer: new UpdateInvoiceCustomer(repository, { now: () => NOW }),
     applyInvoiceItemChange: { execute: vi.fn((input) => useCase.execute(input)) },
     searchProducts: {
@@ -803,8 +807,8 @@ describe("Complete and overwrite completed invoices (#19)", () => {
     fireEvent.change(qtyInput, { target: { value: "5" } });
     fireEvent.keyDown(qtyInput, { key: "Enter" });
 
-    // Staged warning banner should appear
-    await screen.findByText("Hóa đơn đã chốt đang có thay đổi tạm thời.");
+    await screen.findByRole("button", { name: "Lưu ghi đè" });
+    expect(screen.queryByText("Hóa đơn đã chốt đang có thay đổi tạm thời.")).toBeNull();
     expect(applySpy).not.toHaveBeenCalled(); // Repository untouched!
     expect(screen.getByRole("button", { name: "Lưu ghi đè" })).toBeVisible();
     expect(screen.getAllByRole("button", { name: "Hủy thay đổi" }).length).toBeGreaterThanOrEqual(
@@ -849,7 +853,7 @@ describe("Complete and overwrite completed invoices (#19)", () => {
     fireEvent.change(qtyInput, { target: { value: "3" } });
     fireEvent.keyDown(qtyInput, { key: "Enter" });
 
-    await screen.findByText("Hóa đơn đã chốt đang có thay đổi tạm thời.");
+    await screen.findByRole("button", { name: "Lưu ghi đè" });
 
     // Click "Lưu ghi đè"
     await waitFor(() => expect(screen.getByRole("button", { name: "Lưu ghi đè" })).toBeEnabled());
@@ -1426,4 +1430,137 @@ it("records printing from the invoice editor only after success confirmation", a
   );
   expect(print).toHaveBeenCalledTimes(1);
   print.mockRestore();
+});
+
+describe("Issue 49 old debt", () => {
+  function invoice() {
+    const product = makeSingleUnitProduct();
+    return makeDraftInvoice([makeInvoiceItem(ITEM_ID_1, product, product.units[0])]);
+  }
+  it("saves numeric debt on blur, formats it, and includes it in completed receipt", async () => {
+    const { actions, repository } = makeActions(invoice());
+    await ready({
+      ...actions,
+      completeInvoice: new CompleteInvoice(repository, { now: () => NOW }),
+    });
+    const input = screen.getByLabelText("Nợ cũ (₫)");
+    expect(input).toHaveValue("");
+    fireEvent.focus(input);
+    expect(input).toHaveAttribute("type", "number");
+    fireEvent.change(input, { target: { value: "125000" } });
+    fireEvent.blur(input);
+    expect(input).toHaveValue("125.000");
+    await waitFor(async () =>
+      expect(await repository.findById(INVOICE_ID)).toMatchObject({ value: { oldDebt: 125000 } }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Hoàn thành/ }));
+    await screen.findByRole("dialog");
+    expect(screen.getByText("Cũ")).toBeVisible();
+    expect(document.querySelector(".receipt-final-total-row .td-payment")).toHaveTextContent(
+      "154.000",
+    );
+  });
+  it("blocks negative or fractional debt and treats an empty input as zero", async () => {
+    const { actions, repository } = makeActions(invoice());
+    await ready({
+      ...actions,
+      completeInvoice: new CompleteInvoice(repository, { now: () => NOW }),
+    });
+    const input = screen.getByLabelText("Nợ cũ (₫)");
+    fireEvent.focus(input);
+    for (const value of ["-1", "0.5", "9007199254740992"]) {
+      fireEvent.change(input, { target: { value } });
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("button", { name: /Hoàn thành/ })).toBeDisabled();
+    }
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Hoàn thành/ })).toBeEnabled());
+    expect(input).toHaveValue("");
+    expect(await repository.findById(INVOICE_ID)).toMatchObject({ value: { oldDebt: 0 } });
+  });
+  it("retains debt input after a failed save and allows retry", async () => {
+    const { actions, repository } = makeActions(invoice());
+    await ready(actions);
+    repository.failNext("save_draft", "locked");
+    const input = screen.getByLabelText("Nợ cũ (₫)");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "50000" } });
+    fireEvent.blur(input);
+    await screen.findByText("Chưa lưu được nợ cũ. Vui lòng thử lại.");
+    expect(input).toHaveValue("50.000");
+    expect(await repository.findById(INVOICE_ID)).toMatchObject({ value: { oldDebt: 0 } });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu nợ cũ" }));
+    await waitFor(async () =>
+      expect(await repository.findById(INVOICE_ID)).toMatchObject({ value: { oldDebt: 50000 } }),
+    );
+  });
+  it("stages completed debt edits, supports discard, and requires confirmed overwrite", async () => {
+    const completed = invoice().withOldDebt(50000, NOW).complete(NOW);
+    const { actions, repository } = makeActions(completed);
+    render(
+      <CreateInvoiceScreen
+        actions={{
+          ...actions,
+          overwriteCompletedInvoice: new OverwriteCompletedInvoice(repository, { now: () => NOW }),
+        }}
+        editingInvoice={completed}
+      />,
+    );
+    await waitFor(() => expect(screen.getByLabelText("Nợ cũ (₫)")).toHaveValue("50.000"));
+    const input = screen.getByLabelText("Nợ cũ (₫)");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "25000" } });
+    fireEvent.blur(input);
+    expect(await repository.findById(INVOICE_ID)).toMatchObject({ value: { oldDebt: 50000 } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Hủy thay đổi" })[0]);
+    expect(input).toHaveValue("50.000");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "25000" } });
+    fireEvent.blur(input);
+    fireEvent.click(screen.getByRole("button", { name: "Lưu ghi đè" }));
+    expect(await repository.findById(INVOICE_ID)).toMatchObject({ value: { oldDebt: 50000 } });
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận ghi đè" }));
+    await waitFor(async () =>
+      expect(await repository.findById(INVOICE_ID)).toMatchObject({
+        value: { oldDebt: 25000, status: "completed" },
+      }),
+    );
+  });
+});
+
+it("keeps a successful queued item save and flags debt that now exceeds the combined limit", async () => {
+  const product = makeSingleUnitProduct();
+  const initial = makeDraftInvoice([makeInvoiceItem(ITEM_ID_1, product, product.units[0])]);
+  const { actions, repository } = makeActions(initial);
+  let release!: () => void;
+  const delay = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const itemAction = actions.applyInvoiceItemChange;
+  await ready({
+    ...actions,
+    applyInvoiceItemChange: {
+      execute: async (input) => {
+        await delay;
+        return itemAction.execute(input);
+      },
+    },
+    completeInvoice: new CompleteInvoice(repository, { now: () => NOW }),
+  });
+  const price = screen.getByLabelText("Đơn giá dòng 1");
+  fireEvent.change(price, { target: { value: String(Number.MAX_SAFE_INTEGER) } });
+  fireEvent.blur(price);
+  const debt = screen.getByLabelText("Nợ cũ (₫)");
+  fireEvent.focus(debt);
+  fireEvent.change(debt, { target: { value: "1000" } });
+  await act(async () => {
+    release();
+  });
+  await screen.findByText("Nợ cũ và tổng tiền vượt giới hạn hợp lệ. Hãy kiểm tra lại.");
+  expect(await repository.findById(INVOICE_ID)).toMatchObject({
+    value: { total: Number.MAX_SAFE_INTEGER },
+  });
+  expect(price).toHaveAttribute("data-dirty", "false");
+  expect(screen.getByRole("button", { name: /Hoàn thành/ })).toBeDisabled();
 });

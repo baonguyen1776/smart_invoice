@@ -182,7 +182,6 @@
 /* Physical Paper Simulation: THU BA Template (A5 Landscape: 210mm x 148mm) */
 .thu-ba-invoice-paper {
   width: 210mm;
-  max-width: 840px;
   min-height: 148mm;
   height: 148mm;
   max-height: 148mm;
@@ -194,15 +193,14 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  overflow: hidden;
+  flex: 0 0 auto;
   position: relative;
 }
 
 /* Store Header */
 .thu-ba-header {
   text-align: center;
-  margin-bottom: 2px;
+  margin: 0;
 }
 
 .store-name {
@@ -226,48 +224,10 @@
 .invoice-title {
   font-size: 21px;
   font-weight: bold;
-  margin: 2px 0 3px;
+  margin: 0;
+  padding: 2px 0 3px;
   letter-spacing: 0.08em;
   line-height: 1.15;
-}
-
-.invoice-title-page-tag {
-  font-size: 14px;
-  font-weight: bold;
-  margin-left: 8px;
-  letter-spacing: normal;
-}
-
-.thu-ba-header-subpage {
-  text-align: left;
-  margin-bottom: 3px;
-}
-
-.subpage-header-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  border-bottom: 1.5px solid #000000;
-  padding-bottom: 2px;
-  margin-bottom: 2px;
-}
-
-.subpage-store-name {
-  font-size: 18px;
-  font-weight: bold;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.subpage-invoice-title {
-  font-size: 16px;
-  font-weight: bold;
-  letter-spacing: 0.05em;
-}
-
-.subpage-page-tag {
-  font-size: 13px;
-  font-weight: bold;
 }
 
 .receipt-multipage-badge {
@@ -285,7 +245,9 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 3px;
+  margin: 0;
+  padding-bottom: 3px;
+  flex: 0 0 auto;
   font-size: 13px;
   line-height: 1.25;
 }
@@ -304,6 +266,8 @@
 
 .customer-row-val {
   font-weight: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 /* 9-Column Table Layout: Proportional Scaling Totaling Exactly 100% */
@@ -314,7 +278,7 @@
   border-collapse: collapse;
   font-size: 12.5px;
   table-layout: fixed !important;
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 .thu-ba-table th,
@@ -330,7 +294,7 @@
   background-color: #ffff00;
   font-weight: bold;
   text-align: center;
-  height: 22px;
+  height: 25px;
   padding: 2px 2px;
   font-size: 12px;
 }
@@ -384,7 +348,7 @@
 
 /* Table Body Cells */
 .thu-ba-table tbody td {
-  height: 22px;
+  height: 25px;
 }
 
 .td-stt {
@@ -445,11 +409,6 @@
   margin-left: 4px;
 }
 
-.empty-row td {
-  color: #666666;
-  height: 22px;
-}
-
 /* Footer / Total Row */
 .thu-ba-total-row td {
   background-color: #ffff00;
@@ -478,123 +437,53 @@
   letter-spacing: -0.2px;
 }
 
-/* Compact Mode for Invoices with 15-16 items on single page */
-.thu-ba-invoice-paper.compact-mode {
-  padding: 2.5mm 6mm 2mm 6mm;
+/* Keep measured screen and printed geometry identical. */
+.receipt-store-header {
+  display: flow-root;
 }
-
-.thu-ba-invoice-paper.compact-mode .thu-ba-table tbody td {
-  height: 18px;
-  padding: 1px 2px;
-  font-size: 11.5px;
+.receipt-store-header[hidden] {
+  display: none;
 }
-
-.thu-ba-invoice-paper.compact-mode .store-name {
-  font-size: 20px;
+.thu-ba-header {
+  flex: 0 0 auto;
 }
-
-.thu-ba-invoice-paper.compact-mode .invoice-title {
-  font-size: 18px;
-  margin: 1px 0 2px;
+.thu-ba-table {
+  line-height: 1.15;
 }
-
-/* Scaled Layout when Store Header is Omitted ("Không in tên cửa hàng") */
-.thu-ba-invoice-paper.no-store-header {
-  padding: 6mm 8mm 4.5mm 8mm;
+.thu-ba-table col.col-name {
+  width: 32.5% !important;
 }
-
-.thu-ba-invoice-paper.no-store-header .thu-ba-header {
-  margin-bottom: 6px;
+.thu-ba-table .receipt-old-debt-row td,
+.thu-ba-table .receipt-final-total-row td {
+  height: 25px;
+  border: none;
+  font-weight: bold;
 }
-
-.thu-ba-invoice-paper.no-store-header .invoice-title {
-  font-size: 24px;
-  margin: 2px 0 6px;
-  letter-spacing: 0.1em;
+.receipt-debt-label {
+  white-space: nowrap;
 }
-
-.thu-ba-invoice-paper.no-store-header .subpage-header-row {
-  margin-bottom: 6px;
-  padding-bottom: 4px;
-}
-
-.thu-ba-invoice-paper.no-store-header .subpage-invoice-title {
-  font-size: 18px;
-}
-
-.thu-ba-invoice-paper.no-store-header .subpage-page-tag {
-  font-size: 14px;
-}
-
-.thu-ba-invoice-paper.no-store-header .customer-info-section {
-  margin-bottom: 8px;
-  font-size: 13.5px;
-  line-height: 1.32;
-  gap: 3px;
-}
-
-.thu-ba-invoice-paper.no-store-header .thu-ba-table {
+.receipt-paper-hint {
+  margin: 0;
+  padding: 8px 20px;
   font-size: 13px;
 }
 
-.thu-ba-invoice-paper.no-store-header .thu-ba-table thead th {
-  height: 25px;
-  font-size: 12.5px;
-  padding: 3px 2px;
-}
-
-.thu-ba-invoice-paper.no-store-header .thu-ba-table tbody td {
-  height: 25px;
-  font-size: 13px;
-  padding: 2px 3px;
-}
-
-.thu-ba-invoice-paper.no-store-header .empty-row td {
-  height: 25px;
-}
-
-.thu-ba-invoice-paper.no-store-header .thu-ba-total-row td {
-  height: 26px;
-  padding: 3px 3px !important;
-}
-
-.thu-ba-invoice-paper.no-store-header .td-total-label,
-.thu-ba-invoice-paper.no-store-header .td-total-subtotal,
-.thu-ba-invoice-paper.no-store-header .td-total-ck,
-.thu-ba-invoice-paper.no-store-header .td-total-payment {
-  font-size: 13.5px;
-}
-
-/* Compact mode under no-store-header (for 15-16 items without store header) */
-.thu-ba-invoice-paper.no-store-header.compact-mode {
-  padding: 4mm 8mm 3mm 8mm;
-}
-
-.thu-ba-invoice-paper.no-store-header.compact-mode .thu-ba-table tbody td {
-  height: 21px;
-  font-size: 12px;
-}
-
-.thu-ba-invoice-paper.no-store-header.compact-mode .thu-ba-table thead th {
-  height: 23px;
-  font-size: 12px;
-}
-
-.thu-ba-invoice-paper.no-store-header.compact-mode .thu-ba-total-row td {
-  height: 24px;
-}
-
-/* Print Styles */
 @media print {
   @page {
     size: A5 landscape;
-    margin: 4mm 8mm 3mm 8mm;
+    margin: 0;
   }
-
-  body * {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body:has(.receipt-modal-backdrop) * {
     visibility: hidden;
   }
-
+  body:has(.receipt-modal-backdrop) #root {
+    display: none !important;
+  }
   .receipt-modal-backdrop,
   .receipt-modal-dialog,
   .receipt-paper-scroll {
@@ -606,37 +495,33 @@
     margin: 0 !important;
     overflow: visible !important;
     width: 100% !important;
-    max-width: 100% !important;
+    max-width: none !important;
     max-height: none !important;
     display: block !important;
+    backdrop-filter: none !important;
   }
-
   .thu-ba-invoice-paper,
   .thu-ba-invoice-paper * {
-    visibility: visible;
+    visibility: visible !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
-
   .thu-ba-invoice-paper {
-    position: relative !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 148mm !important;
-    max-height: 148mm !important;
     margin: 0 !important;
-    padding: 0 !important;
     box-shadow: none !important;
-    border: none !important;
-    page-break-after: always !important;
-    break-after: page !important;
+    break-after: page;
+    break-inside: avoid;
   }
-
   .thu-ba-invoice-paper:last-child {
-    page-break-after: auto !important;
-    break-after: auto !important;
+    break-after: auto;
   }
-
+  .thu-ba-table tfoot {
+    display: table-row-group;
+  }
+  .thu-ba-table tr,
+  .thu-ba-table tfoot {
+    break-inside: avoid;
+  }
   .no-print {
     display: none !important;
   }

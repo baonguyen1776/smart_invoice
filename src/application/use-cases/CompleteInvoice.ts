@@ -7,6 +7,7 @@ import { loadInvoice, mapInvoiceDomainError } from "./InvoiceUseCaseSupport";
 
 export interface CompleteInvoiceInput {
   readonly invoiceId: string;
+  readonly oldDebt?: number;
   readonly customer?: {
     readonly name?: string | null;
     readonly phone?: string | null;
@@ -32,6 +33,7 @@ export class CompleteInvoice {
         invoice = invoice.withCustomer(input.customer, now);
       }
       invoice = invoice.complete(now);
+      if (input.oldDebt !== undefined) invoice = invoice.withOldDebt(input.oldDebt, now);
       const persisted = await this.repository.complete(invoice);
       return persisted.ok ? ok(invoice) : persisted;
     } catch (error) {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { sumInvoiceAmountsExact } from "../../domain/rules/CalculateInvoiceAmounts";
 import { formatInvoiceAmount } from "../formatters/FormatInvoiceAmount";
 import type { InvoiceItem } from "../../domain/entities/InvoiceItem";
@@ -65,6 +65,28 @@ function moveCell(event: KeyboardEvent<HTMLTableElement>) {
 
 export function InvoiceLineItems(props: InvoiceLineItemsProps) {
   const grid = useInvoiceGrid(props);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const previousRows = useRef<Set<string> | null>(null);
+  useLayoutEffect(() => {
+    const ids = new Set(grid.rows.map((row) => row.id));
+    const previous = previousRows.current;
+    previousRows.current = props.isReady && !props.isLoading ? ids : null;
+    if (!previous || !props.isReady || props.isLoading) return;
+    const addedRows = grid.rows.filter((row) => !previous.has(row.id));
+    const added = addedRows[addedRows.length - 1];
+    const container = scrollRef.current;
+    if (!added || !container) return;
+    const row = container.querySelector<HTMLElement>(`[data-row-id="${added.id}"]`);
+    if (!row) return;
+    const bounds = container.getBoundingClientRect();
+    const rowBounds = row.getBoundingClientRect();
+    const headerHeight = container.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+    const footerHeight = container.querySelector("tfoot")?.getBoundingClientRect().height ?? 0;
+    if (rowBounds.bottom > bounds.bottom - footerHeight)
+      container.scrollTop += rowBounds.bottom - bounds.bottom + footerHeight;
+    else if (rowBounds.top < bounds.top + headerHeight)
+      container.scrollTop += rowBounds.top - bounds.top - headerHeight;
+  }, [grid.rows, props.isReady, props.isLoading]);
   const onPendingInputChange = props.onPendingInputChange;
   useEffect(() => {
     onPendingInputChange?.(grid.hasPendingInput);
@@ -173,6 +195,7 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
         </div>
       </div>
       <div
+        ref={scrollRef}
         className="invoice-table-container invoice-grid-scroll"
         role="region"
         aria-label="Chi tiết hóa đơn"

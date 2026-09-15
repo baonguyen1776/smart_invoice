@@ -145,10 +145,7 @@ describe("InvoiceReceiptPreviewModal", () => {
     expect(screen.getByText("Bút bi Thiên Long")).toBeDefined();
     expect(screen.getByText("5%")).toBeDefined();
 
-    // Default 14 rows padded
-    const rows = screen.getAllByRole("row");
-    // header row (1) + 2 items + 12 empty rows + 1 footer row = 16 rows
-    expect(rows.length).toBeGreaterThanOrEqual(15);
+    expect(screen.getAllByRole("row")).toHaveLength(4);
 
     // Total row
     expect(screen.getByText("Tổng Cộng")).toBeDefined();
@@ -160,7 +157,7 @@ describe("InvoiceReceiptPreviewModal", () => {
     expect(cols?.length).toBe(9);
   });
 
-  it("automatically fills table up to standard 14 rows without manual row controls", () => {
+  it("adds blank display rows below items without changing amounts", () => {
     const item = makeItem(ITEM_ID_1, PROD_ID_1, UNIT_ID_1, "Bút bi", "Cây", 1, 5000);
     const invoice = makeSampleInvoice([item]);
 
@@ -169,16 +166,27 @@ describe("InvoiceReceiptPreviewModal", () => {
     // No manual dropdown
     expect(screen.queryByLabelText("Số dòng:")).toBeNull();
 
-    // 1 header + 1 item + 13 empty rows + 1 footer = 16 rows automatically
+    const blanks = document.querySelectorAll(".receipt-empty-row");
+    expect(blanks).toHaveLength(13);
+    for (const row of blanks) {
+      expect(row.children).toHaveLength(9);
+      expect(row.textContent).toBe("");
+    }
+    expect(invoice.items).toHaveLength(1);
+    expect(invoice.total).toBe(5000);
+    expect(document.querySelector("tbody")?.lastElementChild).toBe(blanks[12]);
+    expect(document.querySelector(".td-total-payment")).toHaveTextContent("5.000");
+    // Decorative rows are hidden from the accessibility tree.
+    // Table header, one item, and the total.
     const rows = screen.getAllByRole("row");
-    expect(rows.length).toBe(16);
+    expect(rows.length).toBe(3);
   });
 
-  it("toggles store branding header via dropdown and applies scaled layout", () => {
+  it("toggles store branding without enlarging the remaining blocks", () => {
     const item = makeItem(ITEM_ID_1, PROD_ID_1, UNIT_ID_1, "Bút bi", "Cây", 1, 5000);
     const invoice = makeSampleInvoice([item]);
 
-    const { container } = render(
+    const { baseElement: container } = render(
       <InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />,
     );
 
@@ -198,12 +206,12 @@ describe("InvoiceReceiptPreviewModal", () => {
     fireEvent.change(storeSelect, { target: { value: "none" } });
     expect(storeSelect).toHaveValue("none");
 
-    // Store branding lines omitted
+    // Store branding lines omitted from the visible paper.
     expect(screen.queryByRole("heading", { name: "THU BA" })).toBeNull();
     expect(
-      screen.queryByText("Địa chỉ : 299 -đường 3/2 - Ô 1 - khu 2 - xã Chợ Gạo - Đồng Tháp"),
-    ).toBeNull();
-    expect(screen.queryByText("SĐT : 0989,601,556 - 0984,831,636")).toBeNull();
+      screen.getByText("Địa chỉ : 299 -đường 3/2 - Ô 1 - khu 2 - xã Chợ Gạo - Đồng Tháp"),
+    ).not.toBeVisible();
+    expect(screen.getByText("SĐT : 0989,601,556 - 0984,831,636")).not.toBeVisible();
 
     // Title still present
     expect(screen.getByRole("heading", { name: "HÓA ĐƠN" })).toBeDefined();
@@ -300,7 +308,7 @@ describe("InvoiceReceiptPreviewModal", () => {
     expect(screen.getAllByText("67.500.000").length).toBe(2);
   });
 
-  it("activates compact-mode styling on single page when invoice has 15-16 items", () => {
+  it("allows forcing the shop header after the automatic layout saves a sheet", () => {
     const items = Array.from({ length: 16 }, (_, i) => {
       const hex = String(i + 1).padStart(12, "0");
       return makeItem(
@@ -315,15 +323,22 @@ describe("InvoiceReceiptPreviewModal", () => {
     });
     const invoice = makeSampleInvoice(items);
 
-    const { container } = render(
+    const { baseElement: container } = render(
       <InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />,
     );
 
+    expect(container.querySelectorAll(".thu-ba-invoice-paper")).toHaveLength(1);
+    const select = screen.getByLabelText("In tin cửa hàng:");
+    expect(select).toHaveValue("none");
+    fireEvent.change(select, { target: { value: "full" } });
     const papers = container.querySelectorAll(".thu-ba-invoice-paper");
-    expect(papers.length).toBe(1);
-    expect(papers[0].classList.contains("compact-mode")).toBe(true);
+    expect(papers.length).toBe(2);
+    expect(screen.getByRole("heading", { name: "THU BA" })).toBeVisible();
+    expect(papers[0].querySelectorAll(".item-row")).toHaveLength(14);
+    expect(papers[1].querySelectorAll(".item-row")).toHaveLength(2);
+    expect(papers[0].classList.contains("compact-mode")).toBe(false);
     expect(screen.getByText("Tổng Cộng")).toBeDefined();
-    expect(screen.queryByText(/Hóa đơn \d+ trang/)).toBeNull();
+    expect(screen.getByText(/Hóa đơn 2 trang/)).toBeDefined();
   });
 
   it("automatically paginates into multiple A5 sheets when invoice exceeds 16 items", () => {
@@ -341,7 +356,7 @@ describe("InvoiceReceiptPreviewModal", () => {
     });
     const invoice = makeSampleInvoice(items);
 
-    const { container } = render(
+    const { baseElement: container } = render(
       <InvoiceReceiptPreviewModal invoice={invoice} isOpen={true} onClose={vi.fn()} />,
     );
 
@@ -357,18 +372,18 @@ describe("InvoiceReceiptPreviewModal", () => {
     expect(papers[1].classList.contains("compact-mode")).toBe(false);
 
     // Page 1 header & running total
-    expect(screen.getByText("Cộng chuyển trang sau (Trang 1/2)")).toBeDefined();
+    expect(screen.queryByText(/Cộng chuyển trang sau/)).toBeNull();
     // Page 2 header & final total
-    expect(screen.getByText("HÓA ĐƠN (Tiếp theo)")).toBeDefined();
-    expect(screen.getByText("Trang 2/2")).toBeDefined();
+    expect(screen.queryByText("HÓA ĐƠN (Tiếp theo)")).toBeNull();
+    expect(papers[1].querySelector(".thu-ba-header, .customer-info-section, thead")).toBeNull();
     expect(screen.getByText("Tổng Cộng")).toBeDefined();
 
-    // Verify row counts on Page 2: 6 items (index 15..20) + 8 empty rows
+    // Page 2 contains only its six actual rows, with no repeated headings or filler.
     const page2 = papers[1];
     const page2ItemRows = page2.querySelectorAll("tbody tr.item-row");
     expect(page2ItemRows.length).toBe(6);
     const page2EmptyRows = page2.querySelectorAll("tbody tr.empty-row");
-    expect(page2EmptyRows.length).toBe(8);
+    expect(page2EmptyRows.length).toBe(0);
   });
 
   it("formats negative subtotal and payment with parentheses in total footer", () => {
@@ -459,5 +474,108 @@ describe("Print result confirmation", () => {
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(print).toHaveBeenCalledTimes(1);
     print.mockRestore();
+  });
+});
+
+describe("old-debt receipt layout", () => {
+  function invoiceWithRows(count: number, debt: number) {
+    return makeSampleInvoice(
+      Array.from({ length: count }, (_, index) =>
+        makeItem(
+          crypto.randomUUID(),
+          PROD_ID_1,
+          UNIT_ID_1,
+          `Hàng ${index + 1}`,
+          "Cái",
+          1,
+          10000,
+          1000,
+        ),
+      ),
+    ).withOldDebt(debt, NOW);
+  }
+  it.each([9, 14])(
+    "prints %i items with debt on one sheet, adding only blanks that fit",
+    (count) => {
+      render(
+        <InvoiceReceiptPreviewModal
+          invoice={invoiceWithRows(count, 50000)}
+          isOpen
+          onClose={vi.fn()}
+        />,
+      );
+      const paper = document.querySelector(".thu-ba-invoice-paper")!;
+      expect(document.querySelectorAll(".thu-ba-invoice-paper")).toHaveLength(1);
+      expect(paper.querySelectorAll(".item-row")).toHaveLength(count);
+      expect(paper.querySelectorAll(".receipt-empty-row")).toHaveLength(count === 9 ? 3 : 0);
+      expect(screen.queryByRole("heading", { name: "THU BA" }) !== null).toBe(count === 9);
+      expect(screen.getByRole("heading", { name: "HÓA ĐƠN" })).toBeVisible();
+      const footer = paper.querySelector("tfoot")!;
+      expect(Array.from(footer.rows, (row) => row.textContent)).toEqual([
+        expect.stringContaining("Tổng Cộng"),
+        expect.stringContaining("Cũ"),
+        expect.stringContaining("Tổng cộng"),
+      ]);
+      expect(footer.querySelector(".receipt-old-debt-row .td-payment")).toHaveTextContent("50.000");
+      expect(footer.querySelector(".receipt-final-total-row .td-payment")).toHaveTextContent(
+        (count * 9000 + 50000).toLocaleString("vi-VN"),
+      );
+    },
+  );
+  it("prints the totals and debt block only after the last item on continuation sheets", () => {
+    render(
+      <InvoiceReceiptPreviewModal invoice={invoiceWithRows(45, 50000)} isOpen onClose={vi.fn()} />,
+    );
+    const papers = document.querySelectorAll(".thu-ba-invoice-paper");
+    expect(papers.length).toBeGreaterThan(1);
+    papers.forEach((paper, index) => {
+      expect(paper.querySelectorAll("thead")).toHaveLength(index === 0 ? 1 : 0);
+      if (index > 0)
+        expect(paper.querySelector(".thu-ba-header, .customer-info-section")).toBeNull();
+      expect(Boolean(paper.querySelector("tfoot"))).toBe(index === papers.length - 1);
+    });
+    expect(document.querySelectorAll(".item-row")).toHaveLength(45);
+    expect(screen.getAllByText("Cũ")).toHaveLength(1);
+  });
+  it("retains the shop by default when cutting it still needs the same two sheets", () => {
+    render(
+      <InvoiceReceiptPreviewModal invoice={invoiceWithRows(16, 50000)} isOpen onClose={vi.fn()} />,
+    );
+    const select = screen.getByLabelText("In tin cửa hàng:");
+    expect(select).toHaveValue("full");
+    expect(Array.from((select as HTMLSelectElement).options, (option) => option.text)).toEqual([
+      "In",
+      "Không in",
+    ]);
+    expect(screen.getByRole("heading", { name: "THU BA" })).toBeVisible();
+    expect(document.querySelectorAll(".thu-ba-invoice-paper")).toHaveLength(2);
+    fireEvent.change(select, { target: { value: "none" } });
+    expect(screen.queryByRole("heading", { name: "THU BA" })).toBeNull();
+    expect(document.querySelectorAll(".thu-ba-invoice-paper")).toHaveLength(2);
+  });
+  it("honors In and Không in after automatically fitting 14 items and debt on one sheet", () => {
+    render(
+      <InvoiceReceiptPreviewModal invoice={invoiceWithRows(14, 50000)} isOpen onClose={vi.fn()} />,
+    );
+    const select = screen.getByLabelText("In tin cửa hàng:");
+    expect(select).toHaveValue("none");
+    fireEvent.change(select, { target: { value: "full" } });
+    expect(select).toHaveValue("full");
+    expect(screen.getByRole("heading", { name: "THU BA" })).toBeVisible();
+    expect(document.querySelectorAll(".thu-ba-invoice-paper")).toHaveLength(2);
+    fireEvent.change(select, { target: { value: "none" } });
+    expect(screen.queryByRole("heading", { name: "THU BA" })).toBeNull();
+    expect(document.querySelectorAll(".thu-ba-invoice-paper")).toHaveLength(1);
+  });
+  it("restores the default header and removes the extra rows when debt is cleared", () => {
+    const invoice = invoiceWithRows(14, 50000);
+    const view = render(<InvoiceReceiptPreviewModal invoice={invoice} isOpen onClose={vi.fn()} />);
+    view.rerender(
+      <InvoiceReceiptPreviewModal invoice={invoice.withOldDebt(0, NOW)} isOpen onClose={vi.fn()} />,
+    );
+    expect(screen.getByRole("heading", { name: "THU BA" })).toBeVisible();
+    expect(screen.queryByText("Cũ")).toBeNull();
+    expect(screen.queryByText("Tổng cộng")).toBeNull();
+    expect(screen.getByText("Tổng Cộng")).toBeVisible();
   });
 });

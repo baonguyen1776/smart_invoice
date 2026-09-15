@@ -8,6 +8,7 @@ import { loadInvoice, mapInvoiceDomainError } from "./InvoiceUseCaseSupport";
 
 export interface OverwriteCompletedInvoiceInput {
   readonly invoiceId: string;
+  readonly oldDebt?: number;
   readonly confirmed: boolean;
   readonly items: readonly InvoiceItem[];
   readonly customer?: {
@@ -36,7 +37,7 @@ export class OverwriteCompletedInvoice {
       if (input.customer) {
         invoice = invoice.withCustomer(input.customer, now);
       }
-      invoice = invoice.overwriteCompleted(input.items, now);
+      invoice = invoice.overwriteCompleted(input.items, now, input.oldDebt);
       const persisted = await this.repository.overwriteCompleted(invoice);
       return persisted.ok ? ok(invoice) : persisted;
     } catch (error) {

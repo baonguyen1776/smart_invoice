@@ -35,6 +35,7 @@ interface InvoiceRecord {
   readonly invoiceNumber: number;
   readonly status: InvoiceStatus;
   readonly total: number;
+  readonly oldDebt?: number;
   readonly customerName?: string | null;
   readonly customerPhone?: string | null;
   readonly customerAddress?: string | null;
@@ -154,6 +155,7 @@ function toRecord(invoice: Invoice): InvoiceRecord {
     invoiceNumber: state.invoiceNumber,
     status: state.status,
     total: state.total,
+    oldDebt: state.oldDebt,
     customerName: state.customerName,
     customerPhone: state.customerPhone,
     customerAddress: state.customerAddress,

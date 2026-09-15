@@ -284,3 +284,21 @@ it("invokes mark_invoice_printed with invoiceId and printedAt", async () => {
     printedAt: "2026-09-13T10:00:00.000Z",
   });
 });
+
+it("round-trips old debt and supplies zero for older records", async () => {
+  const invoice = makeDraft().replaceDraftItems([makeItem()], NOW).withOldDebt(45000, NOW);
+  const command = vi.fn<CommandInvoker>().mockResolvedValue(undefined);
+  const repository = new SQLiteInvoiceRepository(command);
+  await repository.saveDraft(invoice);
+  expect(command).toHaveBeenCalledWith("save_invoice_draft", {
+    invoice: expect.objectContaining({ oldDebt: 45000, total: 20000 }),
+  });
+  command.mockResolvedValue(invoice.toState());
+  expect(await repository.findById(invoice.id)).toMatchObject({
+    value: { oldDebt: 45000, finalTotal: 65000 },
+  });
+  command.mockResolvedValue({ ...invoice.toState(), oldDebt: undefined });
+  expect(await repository.findById(invoice.id)).toMatchObject({
+    value: { oldDebt: 0, finalTotal: 20000 },
+  });
+});
