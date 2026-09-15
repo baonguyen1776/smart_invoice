@@ -1,5 +1,8 @@
 import { WorkspaceSidebar } from "../components/WorkspaceSidebar";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { InvoiceIcon } from "../components/InvoiceIcon";
+import { CurrencyInput } from "../components/CurrencyInput";
+import { formatVndCurrency, stripNonDigits } from "../formatters/CurrencyFormatter";
 import type { ProductCatalogError } from "../../application/errors/ProductCatalogError";
 import type { Result } from "../../application/shared/Result";
 import type { CreateProduct, CreateProductInput } from "../../application/use-cases/CreateProduct";
@@ -56,6 +59,7 @@ export function ProductManagementScreen({
 }: ProductManagementScreenProps) {
   const [products, setProducts] = useState<readonly Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(() =>
@@ -104,17 +108,39 @@ export function ProductManagementScreen({
     });
   }, [brandFilter, categoryFilter, products, query]);
 
-  const loadProducts = useCallback(async () => {
-    setIsLoading(true);
-    const result = await actions.listProducts.execute({ activity: statusFilter });
-    setIsLoading(false);
-    if (!result.ok) {
-      setError(toUserMessage(result.error));
-      return;
-    }
-    setProducts(result.value);
-    setError(null);
-  }, [actions.listProducts, statusFilter]);
+  const loadProducts = useCallback(
+    async (manual = false) => {
+      if (manual) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      const minDelay = manual
+        ? new Promise((resolve) => setTimeout(resolve, 750))
+        : Promise.resolve();
+      try {
+        const [result] = await Promise.all([
+          actions.listProducts.execute({ activity: statusFilter }),
+          minDelay,
+        ]);
+        if (!result.ok) {
+          setError(toUserMessage(result.error));
+          return;
+        }
+        setProducts(result.value);
+        setError(null);
+      } catch {
+        setError("Không thể tải danh mục sản phẩm.");
+      } finally {
+        if (manual) {
+          setIsRefreshing(false);
+        } else {
+          setIsLoading(false);
+        }
+      }
+    },
+    [actions.listProducts, statusFilter],
+  );
 
   useEffect(() => {
     let isCancelled = false;
@@ -159,7 +185,12 @@ export function ProductManagementScreen({
       category: product.category ?? "",
       units: product.units
         .filter((unit) => unit.isActive)
-        .map((unit) => ({ key: unit.id, id: unit.id, name: unit.name, price: String(unit.price) })),
+        .map((unit) => ({
+          key: unit.id,
+          id: unit.id,
+          name: unit.name,
+          price: formatVndCurrency(unit.price),
+        })),
     });
     setError(null);
     setMessage(null);
@@ -274,15 +305,111 @@ export function ProductManagementScreen({
     <div className="app-frame">
       <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
 
-      <main className="workspace">
-        <header className="page-header">
-          <div>
-            <p className="breadcrumb">Không gian làm việc / Sản phẩm</p>
-            <h1>Quản lý sản phẩm</h1>
+      <main className="workspace product-workspace">
+        <h1 className="sr-only">Quản lý sản phẩm</h1>
+
+        <header className="history-header product-screen-header">
+          <div className="history-search-wrapper product-search-wrapper">
+            <input
+              type="text"
+              className="history-search-input"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Tìm theo tên, mã, thương hiệu…"
+              aria-label="Tìm sản phẩm"
+            />
+            <span className="history-search-icon">
+              <InvoiceIcon name="search" size={20} />
+            </span>
           </div>
-          <button className="primary-button" type="button" onClick={openCreateForm}>
-            <span aria-hidden="true">＋</span> Thêm sản phẩm
-          </button>
+
+          <div className="history-actions product-header-actions">
+            <div className="panel-heading product-count-badge-wrap">
+              <h2 id="catalog-title" className="sr-only">
+                Danh sách sản phẩm
+              </h2>
+              <span className="stat-badge products" aria-label="Số lượng sản phẩm">
+                <strong>{products.length}</strong> sản phẩm
+              </span>
+            </div>
+
+            <div className="product-filter-group">
+              <label className="filter-select-label">
+                <span className="sr-only">Lọc theo trạng thái</span>
+                <select
+                  className="history-select-filter"
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as "active" | "inactive" | "all")
+                  }
+                  aria-label="Lọc theo trạng thái"
+                >
+                  <option value="active">Đang bán</option>
+                  <option value="inactive">Đã ngừng bán</option>
+                  <option value="all">Tất cả trạng thái</option>
+                </select>
+              </label>
+              {brands.length > 0 && (
+                <label className="filter-select-label">
+                  <span className="sr-only">Lọc theo thương hiệu</span>
+                  <select
+                    className="history-select-filter"
+                    value={brandFilter}
+                    onChange={(event) => setBrandFilter(event.target.value)}
+                    aria-label="Lọc theo thương hiệu"
+                  >
+                    <option value="">Tất cả thương hiệu</option>
+                    {brands.map((brand) => (
+                      <option key={brand} value={brand}>
+                        {brand}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {categories.length > 0 && (
+                <label className="filter-select-label">
+                  <span className="sr-only">Lọc theo nhóm sản phẩm</span>
+                  <select
+                    className="history-select-filter"
+                    value={categoryFilter}
+                    onChange={(event) => setCategoryFilter(event.target.value)}
+                    aria-label="Lọc theo nhóm sản phẩm"
+                  >
+                    <option value="">Tất cả nhóm hàng</option>
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+
+            <button
+              className={`refresh-button history-pill-btn ${isRefreshing ? "is-refreshing" : ""}`}
+              type="button"
+              onClick={() => void loadProducts(true)}
+              aria-label="Làm mới danh sách"
+              disabled={isLoading || isRefreshing}
+            >
+              <span
+                className={`refresh-icon-wrap ${isRefreshing || isLoading ? "spin-linear" : ""}`}
+              >
+                <InvoiceIcon name="refresh" size={16} />
+              </span>
+              <span>Làm mới</span>
+            </button>
+            <button
+              className="primary-button history-primary-btn"
+              type="button"
+              onClick={openCreateForm}
+            >
+              <InvoiceIcon name="plus" size={15} />
+              <span>Thêm sản phẩm</span>
+            </button>
+          </div>
         </header>
 
         {message && (
@@ -305,68 +432,6 @@ export function ProductManagementScreen({
         )}
 
         <section className="catalog-panel" aria-labelledby="catalog-title">
-          <div className="panel-heading">
-            <div className="catalog-title-row">
-              <h2 id="catalog-title">Danh sách sản phẩm</h2>
-              <span className="stat-badge products" aria-label="Số lượng sản phẩm">
-                <strong>{products.length}</strong> sản phẩm
-              </span>
-            </div>
-            <button
-              className="refresh-button"
-              type="button"
-              onClick={() => void loadProducts()}
-              aria-label="Làm mới danh sách"
-            >
-              ↻ <span>Làm mới</span>
-            </button>
-          </div>
-          <div className="catalog-toolbar">
-            <label className="search-box">
-              <span className="sr-only">Tìm sản phẩm</span>
-              <span aria-hidden="true">⌕</span>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Tìm theo tên, mã, thương hiệu…"
-              />
-            </label>
-            <label>
-              <span className="sr-only">Lọc theo trạng thái</span>
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value as "active" | "inactive" | "all")
-                }
-              >
-                <option value="active">Đang bán</option>
-                <option value="inactive">Ngưng bán</option>
-                <option value="all">Tất cả trạng thái</option>
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Lọc theo thương hiệu</span>
-              <select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}>
-                <option value="">Tất cả thương hiệu</option>
-                {brands.map((brand) => (
-                  <option key={brand}>{brand}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Lọc theo nhóm sản phẩm</span>
-              <select
-                value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
-              >
-                <option value="">Tất cả nhóm</option>
-                {categories.map((category) => (
-                  <option key={category}>{category}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
           {isLoading ? (
             <p className="empty-state" role="status">
               Đang tải danh mục…
@@ -611,11 +676,10 @@ export function ProductManagementScreen({
                       </label>
                       <label>
                         Giá bán (VND)
-                        <input
+                        <CurrencyInput
                           required
-                          inputMode="numeric"
                           value={unit.price}
-                          onChange={(event) => updateUnit(unit.key, "price", event.target.value)}
+                          onValueChange={(formatted) => updateUnit(unit.key, "price", formatted)}
                           placeholder="0"
                           aria-label={`Giá bán đơn vị ${index + 1}`}
                         />
@@ -724,9 +788,10 @@ function parseUnits(
     return { ok: false, error: "Sản phẩm phải có ít nhất một đơn vị đang hoạt động." };
   const parsed: { id: string | null; name: string; price: number }[] = [];
   for (const unit of units) {
-    const price = Number(unit.price);
+    const rawPrice = stripNonDigits(unit.price.trim());
+    const price = Number(rawPrice);
     if (unit.name.trim() === "") return { ok: false, error: "Tên đơn vị không được để trống." };
-    if (!/^\d+$/.test(unit.price.trim()) || !Number.isSafeInteger(price))
+    if (!/^\d+$/.test(rawPrice) || !Number.isSafeInteger(price))
       return { ok: false, error: "Giá bán phải là số nguyên VND không âm." };
     parsed.push({ id: unit.id, name: unit.name, price });
   }

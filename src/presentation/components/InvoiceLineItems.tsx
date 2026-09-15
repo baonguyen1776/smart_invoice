@@ -5,6 +5,8 @@ import type { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import type { InvoiceItemChange } from "../../application/use-cases/ApplyInvoiceItemChange";
 import type { SearchProducts } from "../../application/use-cases/SearchProducts";
 import { previewInvoiceRow, useInvoiceGrid, type InvoiceRowValues } from "../hooks/useInvoiceGrid";
+import { CurrencyInput } from "./CurrencyInput";
+import { formatVndCurrency } from "../formatters/CurrencyFormatter";
 import { InvoiceIcon } from "./InvoiceIcon";
 import { InvoiceProductCell } from "./InvoiceProductCell";
 import "./InvoiceLineItems.css";
@@ -287,32 +289,55 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
                 const numericInput = (
                   field: "quantity" | "unitPrice" | "discount",
                   label: string,
-                ) => (
-                  <input
-                    className="invoice-grid-input invoice-grid-number"
-                    data-grid-cell="true"
-                    data-dirty={row.isDirty}
-                    aria-label={`${label} dòng ${row.number}`}
-                    aria-invalid={Boolean(row.error)}
-                    type={field === "discount" ? "text" : "number"}
-                    inputMode={
-                      field === "discount" ? "decimal" : field === "quantity" ? "text" : "numeric"
-                    }
-                    min={field === "quantity" ? -Number.MAX_SAFE_INTEGER : 0}
-                    max={field === "discount" ? 100 : Number.MAX_SAFE_INTEGER}
-                    step={field === "discount" ? undefined : 1}
-                    placeholder="-"
-                    value={values[field]}
-                    onFocus={(event) => event.currentTarget.select()}
-                    onChange={(event) =>
-                      grid.change(row.id, { ...values, [field]: event.target.value })
-                    }
-                    onBlur={() => grid.commit(row.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") grid.reset(row.id);
-                    }}
-                  />
-                );
+                ) => {
+                  if (field === "unitPrice") {
+                    return (
+                      <CurrencyInput
+                        className="invoice-grid-input invoice-grid-number"
+                        data-grid-cell="true"
+                        data-dirty={row.isDirty}
+                        aria-label={`${label} dòng ${row.number}`}
+                        aria-invalid={Boolean(row.error)}
+                        placeholder="-"
+                        value={values.unitPrice}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onValueChange={(formatted) =>
+                          grid.change(row.id, { ...values, unitPrice: formatted })
+                        }
+                        onBlur={() => grid.commit(row.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") grid.reset(row.id);
+                        }}
+                      />
+                    );
+                  }
+                  return (
+                    <input
+                      className="invoice-grid-input invoice-grid-number"
+                      data-grid-cell="true"
+                      data-dirty={row.isDirty}
+                      aria-label={`${label} dòng ${row.number}`}
+                      aria-invalid={Boolean(row.error)}
+                      type={field === "discount" ? "text" : "number"}
+                      inputMode={
+                        field === "discount" ? "decimal" : field === "quantity" ? "text" : "numeric"
+                      }
+                      min={field === "quantity" ? -Number.MAX_SAFE_INTEGER : 0}
+                      max={field === "discount" ? 100 : Number.MAX_SAFE_INTEGER}
+                      step={field === "discount" ? undefined : 1}
+                      placeholder="-"
+                      value={values[field]}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onChange={(event) =>
+                        grid.change(row.id, { ...values, [field]: event.target.value })
+                      }
+                      onBlur={() => grid.commit(row.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") grid.reset(row.id);
+                      }}
+                    />
+                  );
+                };
                 const hasInlineNote =
                   (Boolean(values.note) || activeNoteRowIds.has(row.id)) && !row.isTrailing;
                 return (
@@ -358,8 +383,8 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
                               },
                               quantity: values.quantity || "1",
                               unitPrice: props.items.some((item) => item.id === row.id)
-                                ? String(unit.price)
-                                : values.unitPrice || String(unit.price),
+                                ? formatVndCurrency(unit.price)
+                                : values.unitPrice || formatVndCurrency(unit.price),
                               discount: values.discount || "0",
                             });
                             grid.commit(row.id);
@@ -454,7 +479,7 @@ export function InvoiceLineItems(props: InvoiceLineItemsProps) {
                               unitId: unit.id,
                               unitName: unit.name,
                             },
-                            unitPrice: String(unit.price),
+                            unitPrice: formatVndCurrency(unit.price),
                           });
                           grid.commit(row.id);
                         }}
