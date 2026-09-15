@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import {
   DEFAULT_RECEIPT_MEASUREMENTS,
   paginateInvoiceReceipt,
+  receiptBlankRowCount,
   type ReceiptMeasurements,
 } from "./PaginateInvoiceReceipt";
 
@@ -13,15 +14,20 @@ export function useReceiptPagination(
   const paperRef = useRef<HTMLDivElement>(null);
   const [measurements, setMeasurements] = useState<ReceiptMeasurements | null>(null);
   const [hasOversizedContent, setHasOversizedContent] = useState(false);
-  const pages = paginateInvoiceReceipt(
+  const currentMeasurements =
     measurements?.rowHeights.length === itemCount
       ? measurements
       : {
           ...DEFAULT_RECEIPT_MEASUREMENTS,
           rowHeights: Array.from({ length: itemCount }, () => 25),
-        },
+        };
+  const pages = paginateInvoiceReceipt(currentMeasurements, hasOldDebt, storeHeaderOverride);
+  const [blankRowHeight, setBlankRowHeight] = useState(25);
+  const blankRowCount = receiptBlankRowCount(
+    currentMeasurements,
+    pages,
     hasOldDebt,
-    storeHeaderOverride,
+    blankRowHeight,
   );
 
   useLayoutEffect(() => {
@@ -33,6 +39,8 @@ export function useReceiptPagination(
       const paper = root.querySelector<HTMLElement>(".thu-ba-invoice-paper");
       if (!paper || !paper.clientHeight) return;
       const styles = getComputedStyle(paper);
+      const blankRow = root.querySelector(".receipt-empty-row");
+      if (blankRow) setBlankRowHeight(blankRow.getBoundingClientRect().height);
       const height = (selector: string) =>
         root.querySelector(selector)?.getBoundingClientRect().height ?? 0;
       const store = root.querySelector<HTMLElement>(".receipt-store-header");
@@ -100,5 +108,5 @@ export function useReceiptPagination(
     };
   });
 
-  return { paperRef, pages, hasOversizedContent };
+  return { paperRef, pages, hasOversizedContent, blankRowCount };
 }

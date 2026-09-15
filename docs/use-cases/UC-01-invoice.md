@@ -187,7 +187,7 @@ right summary keeps its layout and displays the saved invoice total after CK.
 - A5 landscape uses the same physical dimensions, padding, and fonts in preview
   and print. The first sheet has three shop lines, the title, two customer lines,
   and the nine-column table. Fourteen items is the default first-sheet maximum.
-  There are no blank filler rows or compact fonts.
+  Keep the original font sizes and top-aligned layout.
 - The initial preview compares the rendered layouts with and without the shop
   header and chooses the fewest sheets. A tie retains the shop header, including
   when debt still needs a second sheet after cutting it. The selector displays
@@ -208,3 +208,12 @@ right summary keeps its layout and displays the saved invoice total after CK.
   OS/browser dialog. Browser printing cannot set the printer's duplex setting;
   no artificial blank PDF pages are inserted. Hardware-adapter work remains
   governed by the existing printer spike.
+
+- September 15 clarification: for a short, single-sheet invoice, add empty table
+  rows after the actual items and before totals, aiming for 14 body rows in total.
+  Add only as many as fit after reserving customer/header, totals, and old debt
+  space. Paginate actual items first: decorative rows never remove the shop,
+  add pages, or change item counts and amounts. Do not pad continuation sheets
+  or empty drafts. Blank rows have nine empty cells and no sequence number.
+  This replaces the earlier no-padding requirement; the centered/larger-type
+  experiment is reverted. Preview and print use identical rows.

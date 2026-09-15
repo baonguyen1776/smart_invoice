@@ -80,3 +80,26 @@ function paginateWithStoreHeader(
   } while (startIndex < m.rowHeights.length);
   return pages;
 }
+
+// Decorative rows are added after real-item pagination. They can neither hide
+// the shop nor move items/totals onto another sheet.
+export function receiptBlankRowCount(
+  measurements: ReceiptMeasurements,
+  pages: readonly ReceiptPage[],
+  hasOldDebt: boolean,
+  blankRowHeight = 25,
+): number {
+  const count = measurements.rowHeights.length;
+  if (pages.length !== 1 || count === 0 || count >= 14 || blankRowHeight <= 0) return 0;
+  const used =
+    measurements.titleAndCustomerHeight +
+    measurements.tableHeaderHeight +
+    (pages[0].showStoreHeader ? measurements.shopHeaderHeight : 0) +
+    measurements.rowHeights.reduce((sum, height) => sum + height, 0) +
+    measurements.totalHeight +
+    (hasOldDebt ? measurements.debtHeight : 0);
+  return Math.max(
+    0,
+    Math.min(14 - count, Math.floor((measurements.availableHeight - used) / blankRowHeight)),
+  );
+}

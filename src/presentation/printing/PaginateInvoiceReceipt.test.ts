@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_RECEIPT_MEASUREMENTS, paginateInvoiceReceipt } from "./PaginateInvoiceReceipt";
+import {
+  DEFAULT_RECEIPT_MEASUREMENTS,
+  paginateInvoiceReceipt,
+  receiptBlankRowCount,
+} from "./PaginateInvoiceReceipt";
 
 const measurements = (count: number, height = 25) => ({
   ...DEFAULT_RECEIPT_MEASUREMENTS,
@@ -103,4 +107,32 @@ it("chooses the minimum sheet count and favors the shop header on ties", () => {
     expect(auto).toHaveLength(Math.min(full.length, none.length));
     expect(auto[0].showStoreHeader).toBe(full.length <= none.length);
   }
+});
+
+describe("blank receipt rows", () => {
+  it("fills a short single sheet up to 14 rows after real-item pagination", () => {
+    const m = measurements(1);
+    const pages = paginateInvoiceReceipt(m, false);
+    expect(receiptBlankRowCount(m, pages, false)).toBe(13);
+    expect(pages[0].showStoreHeader).toBe(true);
+  });
+  it("reserves debt space without cutting the shop to fit decorative rows", () => {
+    const m = measurements(9);
+    const pages = paginateInvoiceReceipt(m, true);
+    expect(receiptBlankRowCount(m, pages, true)).toBe(3);
+    expect(pages).toHaveLength(1);
+    expect(pages[0].showStoreHeader).toBe(true);
+  });
+  it("respects wrapped rows and the measured blank-row height", () => {
+    const m = measurements(3, 100);
+    const pages = paginateInvoiceReceipt(m, false);
+    expect(receiptBlankRowCount(m, pages, false, 30)).toBe(1);
+    expect(receiptBlankRowCount({ ...m, availableHeight: 480 }, pages, false)).toBe(0);
+  });
+  it("never pads multiple sheets, empty invoices, or a full table", () => {
+    for (const count of [0, 14, 16, 45]) {
+      const m = measurements(count);
+      expect(receiptBlankRowCount(m, paginateInvoiceReceipt(m, false), false)).toBe(0);
+    }
+  });
 });

@@ -51,6 +51,7 @@ function ReceiptPreviewContent({
 
   const {
     paperRef,
+    blankRowCount,
     pages: pageRanges,
     hasOversizedContent,
   } = useReceiptPagination(invoice.items.length, invoice.oldDebt > 0, storeHeaderOverride);
@@ -348,6 +349,14 @@ function ReceiptPreviewContent({
                         <td className="td-payment">{formatInvoiceAmount(item.payment)}</td>
                       </tr>
                     ))}
+                    {page.isLastPage &&
+                      Array.from({ length: blankRowCount }, (_, index) => (
+                        <tr key={`blank-${index}`} className="receipt-empty-row" aria-hidden="true">
+                          {Array.from({ length: 9 }, (_, column) => (
+                            <td key={column} />
+                          ))}
+                        </tr>
+                      ))}
                   </tbody>
                   {page.isLastPage && (
                     <tfoot>

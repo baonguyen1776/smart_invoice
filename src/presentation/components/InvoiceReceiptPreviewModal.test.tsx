@@ -157,7 +157,7 @@ describe("InvoiceReceiptPreviewModal", () => {
     expect(cols?.length).toBe(9);
   });
 
-  it("uses only the actual item rows without padding", () => {
+  it("adds blank display rows below items without changing amounts", () => {
     const item = makeItem(ITEM_ID_1, PROD_ID_1, UNIT_ID_1, "Bút bi", "Cây", 1, 5000);
     const invoice = makeSampleInvoice([item]);
 
@@ -166,6 +166,17 @@ describe("InvoiceReceiptPreviewModal", () => {
     // No manual dropdown
     expect(screen.queryByLabelText("Số dòng:")).toBeNull();
 
+    const blanks = document.querySelectorAll(".receipt-empty-row");
+    expect(blanks).toHaveLength(13);
+    for (const row of blanks) {
+      expect(row.children).toHaveLength(9);
+      expect(row.textContent).toBe("");
+    }
+    expect(invoice.items).toHaveLength(1);
+    expect(invoice.total).toBe(5000);
+    expect(document.querySelector("tbody")?.lastElementChild).toBe(blanks[12]);
+    expect(document.querySelector(".td-total-payment")).toHaveTextContent("5.000");
+    // Decorative rows are hidden from the accessibility tree.
     // Table header, one item, and the total.
     const rows = screen.getAllByRole("row");
     expect(rows.length).toBe(3);
@@ -483,31 +494,34 @@ describe("old-debt receipt layout", () => {
       ),
     ).withOldDebt(debt, NOW);
   }
-  it.each([9, 14])("prints %i items with debt on one sheet and no blank padding", (count) => {
-    render(
-      <InvoiceReceiptPreviewModal
-        invoice={invoiceWithRows(count, 50000)}
-        isOpen
-        onClose={vi.fn()}
-      />,
-    );
-    const paper = document.querySelector(".thu-ba-invoice-paper")!;
-    expect(document.querySelectorAll(".thu-ba-invoice-paper")).toHaveLength(1);
-    expect(paper.querySelectorAll(".item-row")).toHaveLength(count);
-    expect(paper.querySelector(".empty-row")).toBeNull();
-    expect(screen.queryByRole("heading", { name: "THU BA" }) !== null).toBe(count === 9);
-    expect(screen.getByRole("heading", { name: "HÓA ĐƠN" })).toBeVisible();
-    const footer = paper.querySelector("tfoot")!;
-    expect(Array.from(footer.rows, (row) => row.textContent)).toEqual([
-      expect.stringContaining("Tổng Cộng"),
-      expect.stringContaining("Cũ"),
-      expect.stringContaining("Tổng cộng"),
-    ]);
-    expect(footer.querySelector(".receipt-old-debt-row .td-payment")).toHaveTextContent("50.000");
-    expect(footer.querySelector(".receipt-final-total-row .td-payment")).toHaveTextContent(
-      (count * 9000 + 50000).toLocaleString("vi-VN"),
-    );
-  });
+  it.each([9, 14])(
+    "prints %i items with debt on one sheet, adding only blanks that fit",
+    (count) => {
+      render(
+        <InvoiceReceiptPreviewModal
+          invoice={invoiceWithRows(count, 50000)}
+          isOpen
+          onClose={vi.fn()}
+        />,
+      );
+      const paper = document.querySelector(".thu-ba-invoice-paper")!;
+      expect(document.querySelectorAll(".thu-ba-invoice-paper")).toHaveLength(1);
+      expect(paper.querySelectorAll(".item-row")).toHaveLength(count);
+      expect(paper.querySelectorAll(".receipt-empty-row")).toHaveLength(count === 9 ? 3 : 0);
+      expect(screen.queryByRole("heading", { name: "THU BA" }) !== null).toBe(count === 9);
+      expect(screen.getByRole("heading", { name: "HÓA ĐƠN" })).toBeVisible();
+      const footer = paper.querySelector("tfoot")!;
+      expect(Array.from(footer.rows, (row) => row.textContent)).toEqual([
+        expect.stringContaining("Tổng Cộng"),
+        expect.stringContaining("Cũ"),
+        expect.stringContaining("Tổng cộng"),
+      ]);
+      expect(footer.querySelector(".receipt-old-debt-row .td-payment")).toHaveTextContent("50.000");
+      expect(footer.querySelector(".receipt-final-total-row .td-payment")).toHaveTextContent(
+        (count * 9000 + 50000).toLocaleString("vi-VN"),
+      );
+    },
+  );
   it("prints the totals and debt block only after the last item on continuation sheets", () => {
     render(
       <InvoiceReceiptPreviewModal invoice={invoiceWithRows(45, 50000)} isOpen onClose={vi.fn()} />,
