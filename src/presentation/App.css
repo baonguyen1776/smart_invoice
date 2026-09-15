@@ -352,6 +352,153 @@ h2 {
   color: var(--muted);
   font-size: 13px;
 }
+
+/* ─── Streamlined Header & History-Style Controls ───────────────── */
+.product-workspace {
+  padding: 2rem clamp(1.5rem, 2.5vw, 2.5rem) 1.5rem;
+}
+.product-screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+.product-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0;
+  flex-wrap: wrap;
+}
+.product-count-badge-wrap {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+}
+.product-count-badge-wrap .stat-badge.products {
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 1.15rem;
+  border-radius: 9999px;
+  background: var(--surface);
+  border: 1px solid var(--border-darker, #e2e8f0);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-dim, #64748b);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  white-space: nowrap;
+}
+.product-count-badge-wrap .stat-badge.products strong {
+  color: var(--text-main, #1e293b);
+  margin-right: 4px;
+}
+.product-search-wrapper {
+  position: relative;
+  flex: 1;
+  max-width: 520px;
+}
+.product-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.filter-select-label {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+.history-select-filter {
+  height: 48px;
+  padding: 0 16px;
+  background: var(--surface-subtle, #f8fafc);
+  border: 1px solid var(--border-darker, #e2e8f0);
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-main, #1e293b);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+.history-select-filter:hover,
+.history-select-filter:focus {
+  border-color: var(--accent-orange, #ff7a18);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.1);
+}
+
+.history-pill-btn {
+  height: 48px;
+  padding: 0 1.25rem;
+  background: #ffffff;
+  border: 1px solid var(--border-darker, #e2e8f0);
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-main, #1e293b);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+.history-pill-btn:hover {
+  border-color: var(--accent-orange, #ff7a18);
+  color: var(--accent-orange, #ff7a18);
+}
+.history-primary-btn {
+  height: 48px;
+  padding: 0 1.35rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+}
+
+/* ─── Loading & Refresh Animations (360 Rotation) ────────────────── */
+@keyframes spinLinear {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-linear {
+  animation: spinLinear 0.75s linear infinite !important;
+  transform-origin: center center;
+  display: inline-flex !important;
+}
+
+.refresh-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  transform-origin: center center;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.refresh-icon-wrap svg {
+  display: block;
+}
+
+.refresh-button:hover .refresh-icon-wrap:not(.spin-linear) {
+  transform: rotate(180deg);
+}
+
 .refresh-button {
   padding: 0 10px;
   color: #49554e;

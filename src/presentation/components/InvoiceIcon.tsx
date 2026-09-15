@@ -23,16 +23,19 @@ const PATHS = {
     "M8 2v4m8-4v4m-13 4h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
   edit: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
   "chevron-down": "m6 9 6 6 6-6",
+  refresh: "M21 12a9 9 0 1 1-2.64-6.36L21 8M21 3v5h-5",
 } as const;
 
 export function InvoiceIcon({
   name,
   size = 20,
   style,
+  className,
 }: {
   readonly name: keyof typeof PATHS;
   readonly size?: number;
   readonly style?: CSSProperties;
+  readonly className?: string;
 }) {
   return (
     <svg
@@ -46,6 +49,7 @@ export function InvoiceIcon({
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
+      className={className}
       style={style}
     >
       <path d={PATHS[name]} />

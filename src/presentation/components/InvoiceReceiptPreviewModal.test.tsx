@@ -168,10 +168,10 @@ describe("InvoiceReceiptPreviewModal", () => {
 
     const blanks = document.querySelectorAll(".receipt-empty-row");
     expect(blanks).toHaveLength(13);
-    for (const row of blanks) {
+    blanks.forEach((row) => {
       expect(row.children).toHaveLength(9);
       expect(row.textContent).toBe("");
-    }
+    });
     expect(invoice.items).toHaveLength(1);
     expect(invoice.total).toBe(5000);
     expect(document.querySelector("tbody")?.lastElementChild).toBe(blanks[12]);

@@ -19,6 +19,7 @@ import { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import { InvoiceIcon } from "../components/InvoiceIcon";
 import { InvoiceLineItems } from "../components/InvoiceLineItems";
 import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewModal";
+import { CurrencyInput } from "../components/CurrencyInput";
 import "./CreateInvoiceScreen.css";
 
 export interface InvoiceScreenActions {
@@ -130,7 +131,6 @@ function InvoiceEditor({
   const [oldDebtInput, setOldDebtInput] = useState(
     editingInvoice?.oldDebt ? String(editingInvoice.oldDebt) : "",
   );
-  const [isDebtFocused, setIsDebtFocused] = useState(false);
   const [oldDebtError, setOldDebtError] = useState<string | null>(null);
   const [oldDebtDirty, setOldDebtDirty] = useState(false);
   const oldDebtRevision = useRef(0);
@@ -399,8 +399,19 @@ function InvoiceEditor({
     if (!current) return;
     if (current.status === "completed") setHasStagedChanges(true);
     try {
-      if (value && !/^\d+$/.test(value)) throw new Error();
-      updateInvoice(current.withOldDebt(Number(value || 0), current.updatedAt));
+      if (value) {
+        if (!/^\d+$/.test(value) && !/^\d{1,3}(\.\d{3})*$/.test(value)) {
+          throw new Error();
+        }
+        const clean = value.replace(/\./g, "");
+        const num = Number(clean);
+        if (!Number.isSafeInteger(num) || num < 0) {
+          throw new Error();
+        }
+        updateInvoice(current.withOldDebt(num, current.updatedAt));
+      } else {
+        updateInvoice(current.withOldDebt(0, current.updatedAt));
+      }
       setOldDebtError(null);
       setOldDebtDirty(true);
     } catch {
@@ -844,29 +855,23 @@ function InvoiceEditor({
       </a>
       <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
       <main className="workspace" id="invoice-workspace" tabIndex={-1}>
-        <header className="page-header">
-          <div>
-            <p className="breadcrumb">
-              Không gian làm việc <span>/</span> Bán hàng
-            </p>
-            <div className="invoice-heading-row">
-              <h1>{invoice?.status === "completed" ? "Chi tiết hóa đơn" : "Tạo hóa đơn mới"}</h1>
-              <span className="invoice-live-badge">BÁN HÀNG</span>
-              <span className="invoice-id-badge">{invoiceNumber}</span>
-              {invoice?.status === "completed" && (
-                <span className="invoice-status-tag is-completed">ĐÃ HOÀN TẤT</span>
-              )}
-              <button
-                type="button"
-                className="btn-new-draft-header"
-                onClick={() => void handleCreateNewDraft()}
-                title="Tạo hóa đơn nháp mới"
-                disabled={isSaving || isLoading}
-              >
-                <InvoiceIcon name="plus" size={13} />
-                Tạo mới
-              </button>
-            </div>
+        <header className="page-header invoice-screen-header">
+          <div className="invoice-heading-row">
+            <h1>{invoice?.status === "completed" ? "Chi tiết hóa đơn" : "Tạo hóa đơn mới"}</h1>
+            <span className="invoice-id-badge">{invoiceNumber}</span>
+            {invoice?.status === "completed" && (
+              <span className="invoice-status-tag is-completed">ĐÃ HOÀN TẤT</span>
+            )}
+            <button
+              type="button"
+              className="btn-new-draft-header"
+              onClick={() => void handleCreateNewDraft()}
+              title="Tạo hóa đơn nháp mới"
+              disabled={isSaving || isLoading}
+            >
+              <InvoiceIcon name="plus" size={13} />
+              Tạo mới
+            </button>
           </div>
           <div className="invoice-header-actions">
             <div className="invoice-header-status" role="status">
@@ -1013,29 +1018,19 @@ function InvoiceEditor({
         <footer className="invoice-footer-bar">
           <div className="invoice-old-debt-field">
             <label htmlFor="invoice-old-debt">Nợ cũ (₫)</label>
-            <input
+            <CurrencyInput
               id="invoice-old-debt"
               className="invoice-customer-input"
-              type={isDebtFocused ? "number" : "text"}
-              inputMode="numeric"
-              min={0}
-              max={Number.MAX_SAFE_INTEGER}
-              step={1}
               disabled={!invoice || isCompleting || isOverwriting}
-              value={
-                isDebtFocused || oldDebtError
-                  ? oldDebtInput
-                  : Number(oldDebtInput || 0) === 0
-                    ? ""
-                    : Number(oldDebtInput).toLocaleString("vi-VN")
-              }
+              value={oldDebtInput}
               aria-invalid={Boolean(oldDebtError)}
               aria-describedby={oldDebtError ? "old-debt-error" : undefined}
-              onFocus={() => setIsDebtFocused(true)}
-              onChange={(event) => handleOldDebtChange(event.target.value)}
+              onChange={(event) => {
+                handleOldDebtChange(event.target.value);
+              }}
               onBlur={() => {
-                setIsDebtFocused(false);
-                if (!oldDebtError && Number(oldDebtInput || 0) === 0) setOldDebtInput("");
+                if (!oldDebtError && Number(oldDebtInput.replace(/\./g, "") || 0) === 0)
+                  setOldDebtInput("");
                 saveOldDebt();
               }}
               onKeyDown={(event) => {

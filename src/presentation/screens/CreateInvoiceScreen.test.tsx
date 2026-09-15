@@ -212,7 +212,7 @@ describe("Invoice spreadsheet", () => {
     await waitFor(() =>
       expect(repository.saveDraftCalls.slice(-1)[0]?.items[0].unitName).toBe("Lốc 6 lon"),
     );
-    expect(input("Đơn giá dòng 1")).toHaveValue(55000);
+    expect(input("Đơn giá dòng 1")).toHaveValue("55.000");
     expect(input("Tên hàng hóa dòng 2")).toHaveValue("");
     expect(screen.queryByLabelText("Tên hàng hóa dòng 3")).not.toBeInTheDocument();
   });
@@ -624,7 +624,7 @@ describe("Invoice spreadsheet", () => {
     expect(restoreSpy).toHaveBeenCalledTimes(1);
     expect(screen.getByDisplayValue("Cà phê sữa đá")).toBeVisible();
     expect(screen.getByDisplayValue("3")).toBeVisible();
-    expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue(25000);
+    expect(screen.getByLabelText("Đơn giá dòng 1")).toHaveValue("25.000");
     expect(screen.getByDisplayValue("Nguyễn Văn A")).toBeVisible();
     expect(screen.getByDisplayValue("0901234567")).toBeVisible();
     expect(screen.getByDisplayValue("Giao gấp buổi trưa")).toBeVisible();
@@ -1446,7 +1446,7 @@ describe("Issue 49 old debt", () => {
     const input = screen.getByLabelText("Nợ cũ (₫)");
     expect(input).toHaveValue("");
     fireEvent.focus(input);
-    expect(input).toHaveAttribute("type", "number");
+    expect(input).toHaveAttribute("inputmode", "numeric");
     fireEvent.change(input, { target: { value: "125000" } });
     fireEvent.blur(input);
     expect(input).toHaveValue("125.000");
