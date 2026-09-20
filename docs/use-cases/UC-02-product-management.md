@@ -14,6 +14,7 @@
 ### Alternate flow
 - **A1 (Edit a product):** Select a product from the list → edit its name/SKU/brand/category/units/prices → save
 - **A2 (Add/delete a unit while editing):** Add or remove a unit directly in the edit screen, as long as at least one active unit remains; removal soft-deactivates the Unit
+- **A3 (Bulk import products from Excel/CSV):** Click "Import from Excel" → download template (optional) → select `.xlsx`/`.xls`/`.csv` file → preview and validate parsed rows (highlight errors, resolve SKU conflicts) → confirm import → atomic batch insert into SQLite → update product list and refresh Fuse.js search index
 
 ### Exception flow
 - **E1 (Delete a product used in an old invoice):** Use soft-delete by setting `is_active` to `false` instead of permanently deleting it from the database. Inactive products must not appear in autocomplete or be selectable for new invoices, while old invoices continue to display the correct name/price from the time of sale

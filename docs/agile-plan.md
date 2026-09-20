@@ -97,6 +97,7 @@ where business logic lives, how DB migrations work, and what agents must not tou
 - [x] PRD-006 Soft Delete — acceptance criteria: deleted product does not appear in autocomplete, is not selectable for new invoices, but still shows correctly in invoice history
 - [x] PRD-007 Product list UI
 - [x] PRD-008 Duplicate product names allowed (per UC-02 E2), disambiguated by SKU/brand/category in the UI
+- [ ] PRD-009 Bulk import product catalog from Excel/CSV with file template download, unit mapping, validation preview modal, atomic batch persistence, and Fuse.js search index refresh (Issue #52)
 
 ## Sprint 2 — Invoice Core (create + persist a real draft invoice) (4-5 days)
 
