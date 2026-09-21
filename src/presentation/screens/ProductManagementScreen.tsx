@@ -14,6 +14,7 @@ import type {
   UpdateProductUnitInput,
 } from "../../application/use-cases/UpdateProduct";
 import type { Product } from "../../domain/entities/Product";
+import { ProductImportDialog, type ProductImportActions } from "../components/ProductImportDialog";
 
 export interface ProductManagementActions {
   readonly createProduct: Pick<CreateProduct, "execute">;
@@ -21,6 +22,7 @@ export interface ProductManagementActions {
   readonly deactivateProduct: Pick<DeactivateProduct, "execute">;
   readonly reactivateProduct?: Pick<ReactivateProduct, "execute">;
   readonly listProducts: Pick<ListProducts, "execute">;
+  readonly productImport?: ProductImportActions;
 }
 
 export interface ProductManagementScreenProps {
@@ -82,6 +84,7 @@ export function ProductManagementScreen({
   const [error, setError] = useState<string | null>(null);
   const [deactivationError, setDeactivationError] = useState<string | null>(null);
   const [isReactivating, setIsReactivating] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
   const [brandFilter, setBrandFilter] = useState("");
@@ -402,6 +405,14 @@ export function ProductManagementScreen({
               <span>Làm mới</span>
             </button>
             <button
+              className="secondary-button history-pill-btn"
+              type="button"
+              onClick={() => setIsImportOpen(true)}
+              disabled={!actions.productImport}
+            >
+              <span>Import</span>
+            </button>
+            <button
               className="primary-button history-primary-btn"
               type="button"
               onClick={openCreateForm}
@@ -706,6 +717,19 @@ export function ProductManagementScreen({
               </form>
             </section>
           </div>
+        )}
+        {isImportOpen && actions.productImport && (
+          <ProductImportDialog
+            actions={actions.productImport}
+            onClose={() => setIsImportOpen(false)}
+            onImported={async (result) => {
+              setIsImportOpen(false);
+              setMessage(
+                `Đã tạo ${result.created}, cập nhật ${result.updated}, bỏ qua ${result.skipped} sản phẩm.`,
+              );
+              await loadProducts();
+            }}
+          />
         )}
         {productPendingDeactivation && (
           <div className="modal-backdrop" role="presentation">
