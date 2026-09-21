@@ -60,6 +60,14 @@ pub struct ProductAliasRecord {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProductImportChange {
+    pub kind: String,
+    pub product: ProductRecord,
+    pub aliases: Vec<ProductAliasRecord>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InvoiceItemRecord {
     pub id: String,
     pub invoice_id: String,
@@ -176,6 +184,46 @@ pub async fn update_product(
     product: ProductRecord,
 ) -> Result<(), ProductCommandError> {
     save_product(&state.0, product, "update", false).await
+}
+
+#[tauri::command]
+pub async fn import_products(
+    state: State<'_, DatabaseState>,
+    changes: Vec<ProductImportChange>,
+) -> Result<(), ProductCommandError> {
+    apply_product_import(&state.0, changes).await
+}
+
+async fn apply_product_import(
+    pool: &SqlitePool,
+    changes: Vec<ProductImportChange>,
+) -> Result<(), ProductCommandError> {
+    let mut transaction = pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(|error| persistence("import", error))?;
+
+    for change in changes {
+        let is_create = match change.kind.as_str() {
+            "create" => true,
+            "update" => false,
+            _ => {
+                return Err(persistence_message(
+                    "import",
+                    "Unsupported import change kind.",
+                ))
+            }
+        };
+        save_product_in_transaction(&mut transaction, change.product, "import", is_create).await?;
+        for alias in change.aliases {
+            insert_product_alias_in_transaction(&mut transaction, alias, "import").await?;
+        }
+    }
+
+    transaction
+        .commit()
+        .await
+        .map_err(|error| persistence("import", error))
 }
 
 #[tauri::command]
@@ -960,11 +1008,26 @@ async fn save_product(
     operation: &'static str,
     is_create: bool,
 ) -> Result<(), ProductCommandError> {
-    validate_product(&product, operation)?;
     let mut transaction = pool
         .begin_with("BEGIN IMMEDIATE")
         .await
         .map_err(|error| persistence(operation, error))?;
+
+    save_product_in_transaction(&mut transaction, product, operation, is_create).await?;
+
+    transaction
+        .commit()
+        .await
+        .map_err(|error| persistence(operation, error))
+}
+
+async fn save_product_in_transaction(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    product: ProductRecord,
+    operation: &'static str,
+    is_create: bool,
+) -> Result<(), ProductCommandError> {
+    validate_product(&product, operation)?;
 
     let product_result = if is_create {
         sqlx::query(
@@ -980,7 +1043,7 @@ async fn save_product(
         .bind(product.is_active)
         .bind(&product.created_at)
         .bind(&product.updated_at)
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await
     } else {
         sqlx::query(
@@ -995,7 +1058,7 @@ async fn save_product(
         .bind(product.is_active)
         .bind(&product.updated_at)
         .bind(&product.id)
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await
     };
 
@@ -1008,7 +1071,7 @@ async fn save_product(
     if !is_create {
         let existing = sqlx::query("SELECT id, name, is_active FROM units WHERE product_id = ?")
             .bind(&product.id)
-            .fetch_all(&mut *transaction)
+            .fetch_all(&mut **transaction)
             .await
             .map_err(|error| persistence(operation, error))?;
         let mut reserved: HashSet<String> = product
@@ -1045,7 +1108,7 @@ async fn save_product(
                 .bind(temporary)
                 .bind(id)
                 .bind(&product.id)
-                .execute(&mut *transaction)
+                .execute(&mut **transaction)
                 .await
                 .map_err(|error| persistence(operation, error))?;
         }
@@ -1072,7 +1135,7 @@ async fn save_product(
             .bind(unit.is_active)
             .bind(&unit.created_at)
             .bind(&unit.updated_at)
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await
             .map_err(|error| map_write_error(operation, product.sku.as_deref(), error))?;
 
@@ -1081,10 +1144,7 @@ async fn save_product(
         }
     }
 
-    transaction
-        .commit()
-        .await
-        .map_err(|error| persistence(operation, error))
+    Ok(())
 }
 
 fn validate_product(product: &ProductRecord, operation: &str) -> Result<(), ProductCommandError> {
@@ -1273,6 +1333,22 @@ async fn insert_product_alias(
     pool: &SqlitePool,
     alias: ProductAliasRecord,
 ) -> Result<(), ProductCommandError> {
+    let mut transaction = pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(|error| persistence("create_alias", error))?;
+    insert_product_alias_in_transaction(&mut transaction, alias, "create_alias").await?;
+    transaction
+        .commit()
+        .await
+        .map_err(|error| persistence("create_alias", error))
+}
+
+async fn insert_product_alias_in_transaction(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    alias: ProductAliasRecord,
+    operation: &'static str,
+) -> Result<(), ProductCommandError> {
     validate_product_alias(&alias)?;
     let result = sqlx::query(
         "INSERT INTO product_aliases
@@ -1289,13 +1365,13 @@ async fn insert_product_alias(
     .bind(&alias.unit_name)
     .bind(&alias.created_at)
     .bind(&alias.product_id)
-    .execute(pool)
+    .execute(&mut **transaction)
     .await
     .map_err(|error| map_alias_write_error(&alias.alias, error))?;
 
     if result.rows_affected() != 1 {
         return Err(persistence_message(
-            "create_alias",
+            operation,
             "ProductAlias requires an active Product.",
         ));
     }
