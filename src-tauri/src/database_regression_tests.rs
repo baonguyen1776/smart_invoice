@@ -1455,3 +1455,35 @@ fn old_debt_migrates_and_persists_through_invoice_lifecycle() {
         pool.close().await;
     });
 }
+
+#[test]
+fn product_import_rolls_back_every_product_and_alias_on_failure() {
+    tauri::async_runtime::block_on(async {
+        let pool = test_pool().await;
+        let valid = ProductImportChange {
+            kind: "create".to_string(),
+            product: product(PRODUCT_ID, UNIT_ID, Some("SKU-1")),
+            aliases: vec![product_alias(
+                "77777777-7777-4777-8777-777777777777",
+                PRODUCT_ID,
+                "SKU-1-H",
+                "sku 1 h",
+                Some("kiotviet"),
+            )],
+        };
+        let mut invalid_product = product(SECOND_PRODUCT_ID, OTHER_UNIT_ID, Some("SKU-2"));
+        invalid_product.units[0].product_id = PRODUCT_ID.to_string();
+        let invalid = ProductImportChange {
+            kind: "create".to_string(),
+            product: invalid_product,
+            aliases: vec![],
+        };
+
+        let result = apply_product_import(&pool, vec![valid, invalid]).await;
+
+        assert!(result.is_err());
+        assert_eq!(row_count(&pool, "products").await, 0);
+        assert_eq!(row_count(&pool, "units").await, 0);
+        assert_eq!(row_count(&pool, "product_aliases").await, 0);
+    });
+}

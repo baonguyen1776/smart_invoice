@@ -60,6 +60,22 @@ describe("ProductManagementScreen", () => {
     expect(within(heading).queryByText(/nhóm/)).not.toBeInTheDocument();
   });
 
+  it("opens the spreadsheet import review from product management", async () => {
+    const actions: ProductManagementActions = {
+      ...makeActions(),
+      productImport: {
+        previewProductImport: { execute: vi.fn(async () => Promise.reject()) },
+        applyProductImport: { execute: vi.fn(async () => Promise.reject()) },
+      },
+    };
+    render(<ProductManagementScreen actions={actions} />);
+    await screen.findByText("Chưa có sản phẩm");
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(screen.getByRole("dialog", { name: "Import sản phẩm" })).toBeVisible();
+  });
+
   it("submits a new Product through the Application action", async () => {
     const actions = makeActions();
     const create = vi.mocked(actions.createProduct.execute);

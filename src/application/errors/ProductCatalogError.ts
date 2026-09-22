@@ -7,7 +7,8 @@ export type ProductRepositoryOperation =
   | "list"
   | "create_alias"
   | "remove_alias"
-  | "list_aliases";
+  | "list_aliases"
+  | "import";
 
 export interface ProductValidationFailure {
   readonly code: "validation";

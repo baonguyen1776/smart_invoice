@@ -25,6 +25,10 @@ import { UpdateInvoiceOldDebt } from "./application/use-cases/UpdateInvoiceOldDe
 import { UpdateInvoiceCustomer } from "./application/use-cases/UpdateInvoiceCustomer";
 import { ProductSearchStartup } from "./presentation/components/ProductSearchStartup";
 import { App } from "./presentation/App";
+import { KiotVietXlsxProductSpreadsheetParser } from "./infrastructure/spreadsheets/KiotVietXlsxProductSpreadsheetParser";
+import { PreviewProductSpreadsheetImport } from "./application/use-cases/PreviewProductSpreadsheetImport";
+import { ApplyProductSpreadsheetImport } from "./application/use-cases/ApplyProductSpreadsheetImport";
+import { SQLiteProductImportRepository } from "./infrastructure/repositories/SQLiteProductImportRepository";
 
 const rootElement = document.getElementById("root");
 
@@ -38,6 +42,8 @@ const invoiceRepository = new SQLiteInvoiceRepository();
 const searchIndex = new FuseProductSearchIndex();
 const clock = new SystemClock();
 const idGenerator = new WebCryptoIdGenerator();
+const productImportRepository = new SQLiteProductImportRepository();
+const productSpreadsheetParser = new KiotVietXlsxProductSpreadsheetParser();
 
 const searchLoader = new LoadProductSearchIndex(repository, aliasRepository, searchIndex);
 
@@ -47,6 +53,21 @@ const productActions = {
   deactivateProduct: new DeactivateProduct(repository, clock, searchIndex),
   reactivateProduct: new ReactivateProduct(repository, clock, searchIndex, aliasRepository),
   listProducts: new ListProducts(repository),
+  productImport: {
+    previewProductImport: new PreviewProductSpreadsheetImport(
+      productSpreadsheetParser,
+      repository,
+      aliasRepository,
+    ),
+    applyProductImport: new ApplyProductSpreadsheetImport(
+      repository,
+      aliasRepository,
+      productImportRepository,
+      idGenerator,
+      clock,
+      searchIndex,
+    ),
+  },
 };
 
 const invoiceActions = {
