@@ -6,6 +6,7 @@ import { formatInvoiceAmount } from "../formatters/FormatInvoiceAmount";
 import { useReceiptPagination } from "../printing/useReceiptPagination";
 import { InvoiceIcon } from "./InvoiceIcon";
 import "./InvoiceReceiptPreviewModal.css";
+import type { PrintReceiptResult } from "../../application/use-cases/PrintInvoiceReceipt";
 
 export interface CustomerReceiptInfo {
   readonly name?: string;
@@ -19,6 +20,7 @@ export interface InvoiceReceiptPreviewModalProps {
   readonly customer?: CustomerReceiptInfo;
   readonly isOpen: boolean;
   readonly onClose: () => void;
+  readonly onPrintInvoice?: (invoiceId: string) => Promise<PrintReceiptResult>;
   readonly onPrint?: () => void;
   readonly onConfirmPrinted?: () => Promise<string | null>;
   readonly onNewDraft?: () => void;
@@ -33,11 +35,27 @@ export function InvoiceReceiptPreviewModal(props: InvoiceReceiptPreviewModalProp
   );
 }
 
+function mapPrintFailure(kind: string): string {
+  switch (kind) {
+    case "not_found":
+      return "Không tìm thấy hoá đơn.";
+    case "draft_not_printable":
+      return "Chỉ có thể in hoá đơn đã hoàn tất.";
+    case "dialog_blocked":
+      return "Không thể mở hộp thoại in. Vui lòng thử lại.";
+    case "repository_error":
+      return "Lỗi cơ sở dữ liệu. Vui lòng thử lại.";
+    default:
+      return "Không thể in. Vui lòng thử lại.";
+  }
+}
+
 function ReceiptPreviewContent({
   invoice,
   customer,
   isOpen,
   onClose,
+  onPrintInvoice,
   onPrint,
   onConfirmPrinted,
   onNewDraft,
@@ -75,16 +93,38 @@ function ReceiptPreviewContent({
     if (printBusy.current || awaitingPrintConfirmation || hasOversizedContent) return;
     printBusy.current = true;
     setPrintError(null);
-    try {
-      if (onPrint) onPrint();
-      else window.print();
-      if (onConfirmPrinted) setAwaitingPrintConfirmation(true);
-    } catch {
-      setPrintError("Không thể mở hộp thoại in. Vui lòng thử lại.");
-    } finally {
-      printBusy.current = false;
+    if (onPrintInvoice) {
+      // New flow: delegate entirely to PrintInvoiceReceipt use case
+      onPrintInvoice(invoice.id)
+        .then((result) => {
+          if (!result.ok) setPrintError(mapPrintFailure(result.failure.kind));
+        })
+        .catch(() => {
+          setPrintError("Không thể in. Vui lòng thử lại.");
+        })
+        .finally(() => {
+          printBusy.current = false;
+        });
+    } else {
+      // Legacy fallback: window.print() directly
+      try {
+        if (onPrint) onPrint();
+        else window.print();
+        if (onConfirmPrinted) setAwaitingPrintConfirmation(true);
+      } catch {
+        setPrintError("Không thể mở hộp thoại in. Vui lòng thử lại.");
+      } finally {
+        printBusy.current = false;
+      }
     }
-  }, [onPrint, onConfirmPrinted, awaitingPrintConfirmation, hasOversizedContent]);
+  }, [
+    onPrintInvoice,
+    onPrint,
+    onConfirmPrinted,
+    awaitingPrintConfirmation,
+    hasOversizedContent,
+    invoice.id,
+  ]);
 
   async function confirmPrinted() {
     if (!onConfirmPrinted || printBusy.current) return;
