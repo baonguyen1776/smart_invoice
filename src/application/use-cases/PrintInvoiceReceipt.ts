@@ -1,7 +1,5 @@
 import type { PrinterService, PrintFailure } from "../ports/PrinterService";
 import type { InvoiceRepository } from "../repositories/InvoiceRepository";
-import type { MarkInvoicePrinted } from "./MarkInvoicePrinted";
-import type { Clock } from "../ports/Clock";
 
 export type PrintReceiptFailure =
   | { readonly kind: "not_found" }
@@ -17,8 +15,6 @@ export class PrintInvoiceReceipt {
   constructor(
     private readonly invoiceRepository: InvoiceRepository,
     private readonly printer: PrinterService,
-    private readonly markPrinted: MarkInvoicePrinted,
-    private readonly clock: Clock,
   ) {}
 
   async execute(invoiceId: string): Promise<PrintReceiptResult> {
@@ -41,11 +37,8 @@ export class PrintInvoiceReceipt {
       return { ok: false, failure: printResult.failure };
     }
 
-    await this.markPrinted.execute({
-      invoiceId,
-      printedAt: this.clock.now(),
-    });
-
+    // Browser printing cannot establish success. MarkInvoicePrinted is a separate
+    // action after the user confirms the physical result, with independent retry.
     return { ok: true };
   }
 }

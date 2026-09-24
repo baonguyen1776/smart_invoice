@@ -1,17 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Invoice } from "../../domain/entities/Invoice";
-import { Clock } from "../ports/Clock";
 import { PrinterService } from "../ports/PrinterService";
 import { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import { InMemoryInvoiceRepository } from "../../test/doubles/InMemoryInvoiceRepository";
-import { MarkInvoicePrinted } from "./MarkInvoicePrinted";
 import { PrintInvoiceReceipt } from "./PrintInvoiceReceipt";
 
 const NOW = "2026-09-24T00:00:00.000Z";
 const INVOICE_ID = "10000000-0000-4000-8000-000000000001";
 const ITEM_ID = "20000000-0000-4000-8000-000000000001";
-
-const clock: Clock = { now: () => NOW };
 
 const okPrinter: PrinterService = {
   print: () => Promise.resolve({ ok: true }),
@@ -54,8 +50,7 @@ function makeCompletedInvoice(): Invoice {
 }
 
 function makeUseCase(repo: InMemoryInvoiceRepository, printer: PrinterService) {
-  const markPrinted = new MarkInvoicePrinted(repo);
-  return new PrintInvoiceReceipt(repo, printer, markPrinted, clock);
+  return new PrintInvoiceReceipt(repo, printer);
 }
 
 describe("PrintInvoiceReceipt", () => {
@@ -70,16 +65,41 @@ describe("PrintInvoiceReceipt", () => {
     const repo = new InMemoryInvoiceRepository([makeDraftInvoice()]);
     const result = await makeUseCase(repo, failPrinter).execute(INVOICE_ID);
     expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.failure.kind).toBe("draft_not_printable");
     const found = await repo.findById(INVOICE_ID);
     if (found.ok && found.value) expect(found.value.isPrinted).toBe(false);
   });
 
-  it("marks invoice as printed and returns ok on success", async () => {
+  it("leaves invoice unprinted when the print dialog returns without confirmation", async () => {
     const repo = new InMemoryInvoiceRepository([makeCompletedInvoice()]);
     const result = await makeUseCase(repo, okPrinter).execute(INVOICE_ID);
     expect(result.ok).toBe(true);
     const found = await repo.findById(INVOICE_ID);
-    if (found.ok && found.value) expect(found.value.isPrinted).toBe(true);
+    expect(found.ok && found.value?.isPrinted).toBe(false);
+  });
+
+  it("preserves an already printed invoice when opening another print dialog", async () => {
+    const repo = new InMemoryInvoiceRepository([makeCompletedInvoice().markPrinted(NOW)]);
+    await makeUseCase(repo, okPrinter).execute(INVOICE_ID);
+    const found = await repo.findById(INVOICE_ID);
+    expect(found.ok && found.value?.printedAt).toBe(NOW);
+  });
+
+  it("returns printer errors without changing the invoice", async () => {
+    const repo = new InMemoryInvoiceRepository([makeCompletedInvoice()]);
+    expect(await makeUseCase(repo, failPrinter).execute(INVOICE_ID)).toEqual({
+      ok: false,
+      failure: { kind: "dialog_blocked" },
+    });
+    const found = await repo.findById(INVOICE_ID);
+    expect(found.ok && found.value?.isPrinted).toBe(false);
+  });
+
+  it("does not contact the printer for a draft", async () => {
+    const print = vi.fn(okPrinter.print);
+    const repo = new InMemoryInvoiceRepository([makeDraftInvoice()]);
+    await makeUseCase(repo, { print }).execute(INVOICE_ID);
+    expect(print).not.toHaveBeenCalled();
   });
 
   it("returns repository_error when DB fails", async () => {

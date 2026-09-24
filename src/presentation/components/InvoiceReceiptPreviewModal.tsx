@@ -5,6 +5,7 @@ import { sumInvoiceAmountsExact } from "../../domain/rules/CalculateInvoiceAmoun
 import { formatInvoiceAmount } from "../formatters/FormatInvoiceAmount";
 import { useReceiptPagination } from "../printing/useReceiptPagination";
 import { InvoiceIcon } from "./InvoiceIcon";
+import { PrintErrorDialog } from "./PrintErrorDialog";
 import "./InvoiceReceiptPreviewModal.css";
 import type { PrintReceiptResult } from "../../application/use-cases/PrintInvoiceReceipt";
 
@@ -43,6 +44,16 @@ function mapPrintFailure(kind: string): string {
       return "Chỉ có thể in hoá đơn đã hoàn tất.";
     case "dialog_blocked":
       return "Không thể mở hộp thoại in. Vui lòng thử lại.";
+    case "no_printers":
+      return "Chưa có máy in được thiết lập. Vui lòng thêm máy in trong cài đặt hệ thống rồi thử lại.";
+    case "printer_offline":
+      return "Các máy in đang ngoại tuyến. Vui lòng kiểm tra nguồn và kết nối rồi thử lại.";
+    case "printer_paused":
+      return "Các máy in đang tạm dừng. Vui lòng tiếp tục hàng đợi in trong cài đặt hệ thống rồi thử lại.";
+    case "printer_unavailable":
+      return "Các máy in đang báo lỗi hoặc chưa sẵn sàng. Vui lòng kiểm tra hàng đợi in rồi thử lại.";
+    case "printer_check_failed":
+      return "Không kiểm tra được trạng thái máy in. Vui lòng kiểm tra dịch vụ in của hệ thống rồi thử lại.";
     case "repository_error":
       return "Lỗi cơ sở dữ liệu. Vui lòng thử lại.";
     default:
@@ -63,6 +74,7 @@ function ReceiptPreviewContent({
 }: InvoiceReceiptPreviewModalProps & { readonly invoice: Invoice }) {
   const [awaitingPrintConfirmation, setAwaitingPrintConfirmation] = useState(false);
   const [isMarkingPrinted, setIsMarkingPrinted] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
   const printBusy = useRef(false);
   const [storeHeaderOverride, setStoreHeaderOverride] = useState<boolean | undefined>(undefined);
@@ -92,18 +104,21 @@ function ReceiptPreviewContent({
   const handlePrint = useCallback(() => {
     if (printBusy.current || awaitingPrintConfirmation || hasOversizedContent) return;
     printBusy.current = true;
+    setIsPrinting(true);
     setPrintError(null);
     if (onPrintInvoice) {
-      // New flow: delegate entirely to PrintInvoiceReceipt use case
+      // Checking the OS and opening its dialog does not confirm physical output.
       onPrintInvoice(invoice.id)
         .then((result) => {
           if (!result.ok) setPrintError(mapPrintFailure(result.failure.kind));
+          else if (onConfirmPrinted) setAwaitingPrintConfirmation(true);
         })
         .catch(() => {
           setPrintError("Không thể in. Vui lòng thử lại.");
         })
         .finally(() => {
           printBusy.current = false;
+          setIsPrinting(false);
         });
     } else {
       // Legacy fallback: window.print() directly
@@ -115,6 +130,7 @@ function ReceiptPreviewContent({
         setPrintError("Không thể mở hộp thoại in. Vui lòng thử lại.");
       } finally {
         printBusy.current = false;
+        setIsPrinting(false);
       }
     }
   }, [
@@ -147,6 +163,11 @@ function ReceiptPreviewContent({
     if (!isOpen) return;
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (printError) return;
+      if (printBusy.current) {
+        if (event.key === "Escape" || event.key === "Enter") event.preventDefault();
+        return;
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         if (onNewDraft) {
@@ -169,7 +190,7 @@ function ReceiptPreviewContent({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose, onNewDraft, handlePrint]);
+  }, [isOpen, onClose, onNewDraft, handlePrint, printError]);
 
   const resolvedCustomerName = customer?.name ?? invoice.customerName ?? "";
   const resolvedCustomerPhone = customer?.phone ?? invoice.customerPhone ?? "";
@@ -181,7 +202,9 @@ function ReceiptPreviewContent({
   return (
     <div
       className="receipt-modal-backdrop"
-      onClick={onClose}
+      onClick={() => {
+        if (!printBusy.current) onClose();
+      }}
       role="presentation"
       data-testid="receipt-modal-backdrop"
     >
@@ -192,7 +215,7 @@ function ReceiptPreviewContent({
         aria-labelledby="receipt-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="receipt-modal-toolbar no-print">
+        <header className="receipt-modal-toolbar no-print" inert={Boolean(printError)}>
           <div className="receipt-toolbar-left">
             <InvoiceIcon name="receipt" size={18} />
             <h3 id="receipt-modal-title">Xem trước phiếu in hóa đơn</h3>
@@ -213,6 +236,7 @@ function ReceiptPreviewContent({
                 value={pageRanges[0].showStoreHeader ? "full" : "none"}
                 onChange={(e) => setStoreHeaderOverride(e.target.value === "full")}
                 className="receipt-header-select"
+                disabled={isPrinting || isMarkingPrinted}
               >
                 <option value="full">In</option>
                 <option value="none">Không in</option>
@@ -223,6 +247,7 @@ function ReceiptPreviewContent({
                 type="button"
                 className="secondary-button btn-receipt-edit"
                 onClick={onEdit}
+                disabled={isPrinting || isMarkingPrinted}
                 title="Mở chỉnh sửa đơn này trên quầy thu ngân"
               >
                 <InvoiceIcon name="edit" size={15} />
@@ -234,6 +259,7 @@ function ReceiptPreviewContent({
                 type="button"
                 className="secondary-button btn-receipt-new-draft"
                 onClick={onNewDraft}
+                disabled={isPrinting || isMarkingPrinted}
                 title="Đóng xem trước và tạo ngay đơn mới (Esc)"
               >
                 Đóng & Tạo đơn mới <kbd>Esc</kbd>
@@ -243,16 +269,25 @@ function ReceiptPreviewContent({
               type="button"
               className="primary-button btn-receipt-print"
               onClick={handlePrint}
-              disabled={awaitingPrintConfirmation || isMarkingPrinted || hasOversizedContent}
+              disabled={
+                isPrinting || awaitingPrintConfirmation || isMarkingPrinted || hasOversizedContent
+              }
               title="In hóa đơn (Enter)"
             >
               <InvoiceIcon name="receipt" size={15} />
-              In hóa đơn <kbd>Enter</kbd>
+              {isPrinting ? (
+                "Đang kiểm tra / mở hộp thoại in…"
+              ) : (
+                <>
+                  In hóa đơn <kbd>Enter</kbd>
+                </>
+              )}
             </button>
             <button
               type="button"
               className="btn-receipt-close"
               onClick={onClose}
+              disabled={isPrinting || isMarkingPrinted}
               aria-label="Đóng cửa sổ xem trước"
             >
               <InvoiceIcon name="close" size={16} />
@@ -261,15 +296,24 @@ function ReceiptPreviewContent({
         </header>
 
         {printError && (
-          <p className="no-print" role="alert">
-            {printError}
-          </p>
+          <PrintErrorDialog
+            title={
+              awaitingPrintConfirmation ? "Chưa lưu được trạng thái in" : "Không thể in hóa đơn"
+            }
+            message={printError}
+            onClose={() => setPrintError(null)}
+            onRetry={() => {
+              if (awaitingPrintConfirmation) void confirmPrinted();
+              else handlePrint();
+            }}
+          />
         )}
         {awaitingPrintConfirmation && (
           <div
             className="receipt-print-confirmation no-print"
             role="group"
             aria-label="Xác nhận kết quả in"
+            inert={Boolean(printError)}
           >
             <p>Phiếu đã được in thành công chưa?</p>
             <button

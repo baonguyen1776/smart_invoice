@@ -203,17 +203,7 @@ export function InvoiceHistoryScreen({
           ok: false as const,
           failure: { kind: "unknown" as const, message: "PrintInvoiceReceipt not configured" },
         };
-      const result = await actions.printInvoice.execute(invoiceId);
-      if (result.ok) {
-        const printedAt = new Date().toISOString();
-        setSelectedInvoice((current) =>
-          current?.id === invoiceId ? current.markPrinted(printedAt) : current,
-        );
-        setInvoices((current) =>
-          current.map((item) => (item.id === invoiceId ? item.markPrinted(printedAt) : item)),
-        );
-      }
-      return result;
+      return actions.printInvoice.execute(invoiceId);
     },
     [actions.printInvoice],
   );
@@ -560,9 +550,7 @@ export function InvoiceHistoryScreen({
         isOpen={isReceiptOpen}
         onClose={() => setIsReceiptOpen(false)}
         onPrintInvoice={actions.printInvoice ? handlePrintInvoice : undefined}
-        onConfirmPrinted={
-          !actions.printInvoice && actions.markInvoicePrinted ? handleConfirmPrinted : undefined
-        }
+        onConfirmPrinted={actions.markInvoicePrinted ? handleConfirmPrinted : undefined}
         onEdit={
           onSelectInvoiceForEdit && selectedInvoice
             ? () => handleEditInvoice(selectedInvoice)
