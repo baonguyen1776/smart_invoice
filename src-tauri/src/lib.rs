@@ -1,4 +1,5 @@
 mod database;
+mod printer;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -6,6 +7,7 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().build())
         .setup(database::initialize)
         .invoke_handler(tauri::generate_handler![
+            printer::check_printers,
             database::create_product,
             database::get_product,
             database::update_product,
