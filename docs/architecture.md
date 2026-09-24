@@ -346,9 +346,23 @@ Printer Adapter
 OS / Printer Plugin / ESC-POS
 ```
 
-The `tauri-plugin-printer-v2` adapter is the approved printer integration.
-A technical spike with real hardware is still needed to determine whether the
-MVP should target a standard/PDF printer or a 58mm/80mm thermal printer.
+The v1 decision in [spike #20](issues/issue-20-printer-spike.md) uses
+`window.print()` through `PrinterService`, with A5 landscape output;
+`tauri-plugin-printer-v2` is deferred. This supersedes earlier plugin references
+in the stack overview.
+
+The September 24 approved follow-up adds a read-only Tauri `check_printers`
+command before opening the dialog: CUPS `lpstat` on macOS and Win32_Printer via
+PowerShell/CIM on Windows. No new dependency or printer configuration writes are
+required. The command runs off the UI thread with an eight-second process limit.
+It distinguishes missing queues, offline/paused queues, other faults, and an
+unavailable status check. A usable alternative queue permits the OS dialog.
+
+Device errors are displayed in a modal popup with Retry and Close. The existing
+explicit result confirmation alone calls `MarkInvoicePrinted`; opening the
+dialog does not update persistence. Status-write retries never open another
+print dialog. Driver status and a returned dialog cannot prove paper output;
+Windows/Canon physical printing still requires deployment-environment testing.
 
 ---
 

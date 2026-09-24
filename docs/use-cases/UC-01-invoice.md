@@ -172,6 +172,27 @@ right summary keeps its layout and displays the saved invoice total after CK.
   without printing another copy. This temporary confirmation flow does not
   replace the planned hardware spike and PrinterService adapter.
 
+## Printer checks and error popup (approved September 24, 2026)
+
+- Both invoice editor and history printing check the operating system's configured
+  printer queues before opening the existing print dialog.
+- No configured printers, all queues offline/paused, other reported blocking
+  faults, and failure to inspect the print service have distinct messages.
+  These appear in a modal error popup with Close and Retry actions.
+- Retry repeats inspection; it does not bypass a failed check. If at least one
+  queue has no reported blocking fault, the OS dialog remains available so the
+  user can choose that queue. Standard/PDF printer queues are supported.
+- The check uses CUPS on macOS and Win32_Printer on Windows, with a bounded
+  timeout. Driver status is advisory and cannot prove physical connectivity or
+  paper output. Unknown inspection failures must not be presented as an offline
+  device. The OS dialog remains responsible for the selected destination.
+- Returning from the print dialog never marks an invoice printed. The existing
+  explicit success/cancellation confirmation remains required. A failed status
+  write shows the error popup; Retry writes the status without printing again.
+- While inspecting/opening the dialog or saving confirmation, prevent duplicate
+  requests and closing/changing the receipt. Escape closes an error popup without
+  closing the underlying receipt or creating a new invoice.
+
 ## Create Invoice and A5 receipt optimization (Issue #49)
 
 - Reveal a newly appended grid row inside the table scroll container without
