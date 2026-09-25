@@ -1432,6 +1432,24 @@ it("records printing from the invoice editor only after success confirmation", a
   print.mockRestore();
 });
 
+it("uses the device check from the editor and shows a popup when no printer exists", async () => {
+  localStorage.clear();
+  const product = makeSingleUnitProduct();
+  const original = makeCompletedInvoice([makeInvoiceItem(ITEM_ID_1, product, product.units[0])]);
+  const { actions: base } = makeActions(original);
+  const mark = vi.fn(async () => ok(undefined));
+  const print = vi.fn(async () => ({
+    ok: false as const,
+    failure: { kind: "no_printers" as const },
+  }));
+  await ready({ ...base, printInvoice: { execute: print }, markInvoicePrinted: { execute: mark } });
+  fireEvent.click(screen.getByRole("button", { name: "In hóa đơn" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /In hóa đơn/ }));
+  expect(await screen.findByRole("alertdialog")).toHaveTextContent("Chưa có máy in được thiết lập");
+  expect(print).toHaveBeenCalledWith(original.id);
+  expect(mark).not.toHaveBeenCalled();
+});
+
 describe("Issue 49 old debt", () => {
   function invoice() {
     const product = makeSingleUnitProduct();

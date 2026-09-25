@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "../../application/shared/Result";
+import { err, ok } from "../../application/shared/Result";
 import { Invoice } from "../../domain/entities/Invoice";
 import { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import { InvoiceHistoryScreen, type InvoiceHistoryActions } from "./InvoiceHistoryScreen";
@@ -251,6 +251,40 @@ describe("InvoiceHistoryScreen", () => {
     expect(await screen.findByText("Đã in")).toBeVisible();
 
     window.print = originalPrint;
+  });
+
+  it("requires confirmation on the service path and retries a status failure without reprinting", async () => {
+    const invoice = makeInvoice({ invoiceNumber: 101, isPrinted: false });
+    const print = vi.fn(async () => ({ ok: true as const }));
+    const mark = vi
+      .fn()
+      .mockResolvedValueOnce(
+        err({ code: "persistence", operation: "mark_printed", message: "disk error" }),
+      )
+      .mockResolvedValueOnce(ok(undefined));
+    render(
+      <InvoiceHistoryScreen
+        actions={{
+          listInvoices: { execute: async () => ok([invoice]) },
+          printInvoice: { execute: print },
+          markInvoicePrinted: { execute: mark },
+        }}
+      />,
+    );
+    fireEvent.click(await screen.findByText("#000101"));
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Đã hủy / Chưa in" }));
+    expect(mark).not.toHaveBeenCalled();
+    expect(screen.getByText("Chưa in")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Đã in thành công" }));
+    const error = await screen.findByRole("alertdialog");
+    expect(error).toHaveTextContent("Chưa lưu được trạng thái đã in");
+    expect(screen.getByText("Chưa in")).toBeVisible();
+    fireEvent.click(within(error).getByRole("button", { name: "Thử lại" }));
+    expect(await screen.findByText("Đã in")).toBeVisible();
+    expect(mark).toHaveBeenCalledTimes(2);
+    expect(print).toHaveBeenCalledTimes(2);
   });
 
   it("calls onSelectInvoiceForEdit and navigates when Sửa hóa đơn is clicked in modal", async () => {

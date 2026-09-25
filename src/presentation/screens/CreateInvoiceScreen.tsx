@@ -1312,6 +1312,11 @@ function InvoiceEditor({
           }}
           isOpen={isReceiptModalOpen}
           onClose={() => setIsReceiptModalOpen(false)}
+          onPrintInvoice={
+            actions.printInvoice
+              ? (invoiceId) => actions.printInvoice!.execute(invoiceId)
+              : undefined
+          }
           onConfirmPrinted={actions.markInvoicePrinted ? handleConfirmPrinted : undefined}
           onNewDraft={() => {
             setIsReceiptModalOpen(false);

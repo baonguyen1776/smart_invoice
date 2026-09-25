@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Invoice } from "../../domain/entities/Invoice";
 import { InvoiceItem } from "../../domain/entities/InvoiceItem";
 import { InvoiceReceiptPreviewModal } from "./InvoiceReceiptPreviewModal";
+import type { PrintReceiptResult } from "../../application/use-cases/PrintInvoiceReceipt";
 
 const NOW = "2026-09-12T14:30:00.000Z";
 const INVOICE_ID = "11111111-1111-4111-8111-111111111111";
@@ -408,6 +409,95 @@ describe("Print result confirmation", () => {
     return makeSampleInvoice([makeItem(ITEM_ID_1, PROD_ID_1, UNIT_ID_1, "Coffee", "Can", 1, 5000)]);
   }
 
+  it.each([
+    ["no_printers", "Chưa có máy in được thiết lập"],
+    ["printer_offline", "Các máy in đang ngoại tuyến"],
+    ["printer_paused", "Các máy in đang tạm dừng"],
+    ["printer_unavailable", "Các máy in đang báo lỗi"],
+    ["printer_check_failed", "Không kiểm tra được trạng thái máy in"],
+  ] as const)("shows an actionable error popup for %s", async (kind, message) => {
+    const print = vi.fn(async (): Promise<PrintReceiptResult> => ({
+      ok: false,
+      failure: { kind },
+    }));
+    const confirm = vi.fn(async () => null);
+    const close = vi.fn();
+    render(
+      <InvoiceReceiptPreviewModal
+        invoice={receipt()}
+        isOpen
+        onClose={close}
+        onPrintInvoice={print}
+        onConfirmPrinted={confirm}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    const popup = await screen.findByRole("alertdialog");
+    expect(popup).toHaveTextContent(message);
+    expect(within(popup).getByRole("button", { name: "Đóng" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+    expect(within(popup).getByRole("button", { name: "Thử lại" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(close).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Đã in thành công" })).toBeNull();
+  });
+
+  it("checks again from the error popup and confirms only after a successful retry", async () => {
+    const print = vi
+      .fn<() => Promise<PrintReceiptResult>>()
+      .mockResolvedValueOnce({ ok: false, failure: { kind: "no_printers" } })
+      .mockResolvedValueOnce({ ok: true });
+    const confirm = vi.fn(async () => null);
+    render(
+      <InvoiceReceiptPreviewModal
+        invoice={receipt()}
+        isOpen
+        onClose={vi.fn()}
+        onPrintInvoice={print}
+        onConfirmPrinted={confirm}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Thử lại" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Đã hủy / Chưa in" }));
+    expect(print).toHaveBeenCalledTimes(2);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps the receipt mounted and prevents duplicate requests while checking devices", async () => {
+    let finish!: (result: PrintReceiptResult) => void;
+    const pending = new Promise<PrintReceiptResult>((resolve) => {
+      finish = resolve;
+    });
+    const print = vi.fn(() => pending);
+    const close = vi.fn();
+    const newDraft = vi.fn();
+    render(
+      <InvoiceReceiptPreviewModal
+        invoice={receipt()}
+        isOpen
+        onClose={close}
+        onNewDraft={newDraft}
+        onPrintInvoice={print}
+        onConfirmPrinted={async () => null}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
+    expect(screen.getByRole("button", { name: /Đang kiểm tra/ })).toBeDisabled();
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(screen.getByTestId("receipt-modal-backdrop"));
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
+    expect(newDraft).not.toHaveBeenCalled();
+    await act(async () => finish({ ok: true }));
+    expect(screen.getByRole("button", { name: "Đã in thành công" })).toBeVisible();
+  });
+
   it("does not record a cancelled print and confirms only after an explicit success action", async () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => {});
     const confirm = vi.fn(async () => null);
@@ -467,7 +557,7 @@ describe("Print result confirmation", () => {
     fireEvent.click(screen.getByRole("button", { name: /In hóa đơn/ }));
     fireEvent.click(screen.getByRole("button", { name: "Đã in thành công" }));
     await screen.findByRole("alert");
-    fireEvent.click(screen.getByRole("button", { name: "Đã in thành công" }));
+    fireEvent.click(screen.getByRole("button", { name: "Thử lại" }));
     await waitFor(() =>
       expect(screen.queryByRole("group", { name: "Xác nhận kết quả in" })).toBeNull(),
     );

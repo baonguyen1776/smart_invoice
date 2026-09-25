@@ -87,7 +87,7 @@ const invoiceActions = {
   completeInvoice: new CompleteInvoice(invoiceRepository, clock),
   overwriteCompletedInvoice: new OverwriteCompletedInvoice(invoiceRepository, clock),
   markInvoicePrinted,
-  printInvoice: new PrintInvoiceReceipt(invoiceRepository, printer, markInvoicePrinted, clock),
+  printInvoice: new PrintInvoiceReceipt(invoiceRepository, printer),
 };
 
 createRoot(rootElement).render(
