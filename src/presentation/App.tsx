@@ -60,6 +60,7 @@ export function App({
       ? {
           listInvoices: invoiceActions.listInvoices,
           markInvoicePrinted: invoiceActions.markInvoicePrinted,
+          printInvoice: invoiceActions.printInvoice,
         }
       : undefined);
 

@@ -12,6 +12,7 @@ import { DeactivateProduct } from "./application/use-cases/DeactivateProduct";
 import { ListProducts } from "./application/use-cases/ListProducts";
 import { LoadProductSearchIndex } from "./application/use-cases/LoadProductSearchIndex";
 import { MarkInvoicePrinted } from "./application/use-cases/MarkInvoicePrinted";
+import { PrintInvoiceReceipt } from "./application/use-cases/PrintInvoiceReceipt";
 import { ReactivateProduct } from "./application/use-cases/ReactivateProduct";
 import { SearchProducts } from "./application/use-cases/SearchProducts";
 import { UpdateProduct } from "./application/use-cases/UpdateProduct";
@@ -19,6 +20,7 @@ import { SQLiteInvoiceRepository } from "./infrastructure/repositories/SQLiteInv
 import { SQLiteProductAliasRepository } from "./infrastructure/repositories/SQLiteProductAliasRepository";
 import { SQLiteProductRepository } from "./infrastructure/repositories/SQLiteProductRepository";
 import { FuseProductSearchIndex } from "./infrastructure/search/FuseProductSearchIndex";
+import { WebviewPrintAdapter } from "./infrastructure/printer/WebPrintAdapter";
 import { SystemClock } from "./infrastructure/system/SystemClock";
 import { WebCryptoIdGenerator } from "./infrastructure/system/WebCryptoIdGenerator";
 import { UpdateInvoiceOldDebt } from "./application/use-cases/UpdateInvoiceOldDebt";
@@ -70,6 +72,9 @@ const productActions = {
   },
 };
 
+const printer = new WebviewPrintAdapter();
+const markInvoicePrinted = new MarkInvoicePrinted(invoiceRepository);
+
 const invoiceActions = {
   createInvoiceDraft: new CreateInvoiceDraft(invoiceRepository, idGenerator, clock),
   restoreInvoiceDraft: new RestoreInvoiceDraft(invoiceRepository, idGenerator, clock),
@@ -81,7 +86,8 @@ const invoiceActions = {
   deleteInvoiceDraft: new DeleteInvoiceDraft(invoiceRepository),
   completeInvoice: new CompleteInvoice(invoiceRepository, clock),
   overwriteCompletedInvoice: new OverwriteCompletedInvoice(invoiceRepository, clock),
-  markInvoicePrinted: new MarkInvoicePrinted(invoiceRepository),
+  markInvoicePrinted,
+  printInvoice: new PrintInvoiceReceipt(invoiceRepository, printer, markInvoicePrinted, clock),
 };
 
 createRoot(rootElement).render(

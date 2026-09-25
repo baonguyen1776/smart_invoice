@@ -11,6 +11,7 @@ import type { CreateInvoiceDraft } from "../../application/use-cases/CreateInvoi
 import type { DeleteInvoiceDraft } from "../../application/use-cases/DeleteInvoiceDraft";
 import type { ListInvoices } from "../../application/use-cases/ListInvoices";
 import type { MarkInvoicePrinted } from "../../application/use-cases/MarkInvoicePrinted";
+import type { PrintInvoiceReceipt } from "../../application/use-cases/PrintInvoiceReceipt";
 import type { OverwriteCompletedInvoice } from "../../application/use-cases/OverwriteCompletedInvoice";
 import type { RestoreInvoiceDraft } from "../../application/use-cases/RestoreInvoiceDraft";
 import type { SearchProducts } from "../../application/use-cases/SearchProducts";
@@ -35,6 +36,7 @@ export interface InvoiceScreenActions {
   readonly completeInvoice?: Pick<CompleteInvoice, "execute">;
   readonly overwriteCompletedInvoice?: Pick<OverwriteCompletedInvoice, "execute">;
   readonly markInvoicePrinted?: Pick<MarkInvoicePrinted, "execute">;
+  readonly printInvoice?: Pick<PrintInvoiceReceipt, "execute">;
 }
 
 function applyItemChangeInMemory(

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Invoice } from "../../domain/entities/Invoice";
 import type { ListInvoices } from "../../application/use-cases/ListInvoices";
 import type { MarkInvoicePrinted } from "../../application/use-cases/MarkInvoicePrinted";
+import type { PrintInvoiceReceipt } from "../../application/use-cases/PrintInvoiceReceipt";
 import { InvoiceIcon } from "../components/InvoiceIcon";
 import { WorkspaceSidebar } from "../components/WorkspaceSidebar";
 import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewModal";
@@ -12,6 +13,7 @@ import "./InvoiceHistoryScreen.css";
 export interface InvoiceHistoryActions {
   readonly listInvoices: Pick<ListInvoices, "execute">;
   readonly markInvoicePrinted?: Pick<MarkInvoicePrinted, "execute">;
+  readonly printInvoice?: Pick<PrintInvoiceReceipt, "execute">;
 }
 
 export interface InvoiceHistoryScreenProps {
@@ -198,6 +200,28 @@ export function InvoiceHistoryScreen({
       return "Chưa lưu được trạng thái đã in. Vui lòng thử lại.";
     }
   }, [selectedInvoice, actions.markInvoicePrinted]);
+
+  const handlePrintInvoice = useCallback(
+    async (invoiceId: string) => {
+      if (!actions.printInvoice)
+        return {
+          ok: false as const,
+          failure: { kind: "unknown" as const, message: "PrintInvoiceReceipt not configured" },
+        };
+      const result = await actions.printInvoice.execute(invoiceId);
+      if (result.ok) {
+        const printedAt = new Date().toISOString();
+        setSelectedInvoice((current) =>
+          current?.id === invoiceId ? current.markPrinted(printedAt) : current,
+        );
+        setInvoices((current) =>
+          current.map((item) => (item.id === invoiceId ? item.markPrinted(printedAt) : item)),
+        );
+      }
+      return result;
+    },
+    [actions.printInvoice],
+  );
 
   // Xử lý chuyển sang sửa hóa đơn
   const handleEditInvoice = useCallback(
@@ -543,7 +567,10 @@ export function InvoiceHistoryScreen({
         }
         isOpen={isReceiptOpen}
         onClose={() => setIsReceiptOpen(false)}
-        onConfirmPrinted={actions.markInvoicePrinted ? handleConfirmPrinted : undefined}
+        onPrintInvoice={actions.printInvoice ? handlePrintInvoice : undefined}
+        onConfirmPrinted={
+          !actions.printInvoice && actions.markInvoicePrinted ? handleConfirmPrinted : undefined
+        }
         onEdit={
           onSelectInvoiceForEdit && selectedInvoice
             ? () => handleEditInvoice(selectedInvoice)
