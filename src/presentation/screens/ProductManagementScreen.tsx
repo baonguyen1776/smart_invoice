@@ -2,7 +2,6 @@ import { WorkspaceSidebar } from "../components/WorkspaceSidebar";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { InvoiceIcon } from "../components/InvoiceIcon";
 import { CurrencyInput } from "../components/CurrencyInput";
-import { QuickCalculatorButton } from "../components/QuickCalculator";
 import { formatVndCurrency, stripNonDigits } from "../formatters/CurrencyFormatter";
 import type { ProductCatalogError } from "../../application/errors/ProductCatalogError";
 import type { Result } from "../../application/shared/Result";
@@ -311,7 +310,12 @@ export function ProductManagementScreen({
 
   return (
     <div className="app-frame">
-      <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
+      <WorkspaceSidebar
+        activeScreen={activeScreen}
+        onNavigate={onNavigate}
+        isCalculatorOpen={isCalculatorOpen}
+        onToggleCalculator={onToggleCalculator}
+      />
 
       <main className="workspace product-workspace">
         <h1 className="sr-only">Quản lý sản phẩm</h1>
@@ -332,9 +336,6 @@ export function ProductManagementScreen({
           </div>
 
           <div className="history-actions product-header-actions">
-            {onToggleCalculator && (
-              <QuickCalculatorButton isOpen={isCalculatorOpen} onToggle={onToggleCalculator} />
-            )}
             <div className="panel-heading product-count-badge-wrap">
               <h2 id="catalog-title" className="sr-only">
                 Danh sách sản phẩm

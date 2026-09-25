@@ -21,7 +21,6 @@ import { InvoiceIcon } from "../components/InvoiceIcon";
 import { InvoiceLineItems } from "../components/InvoiceLineItems";
 import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewModal";
 import { CurrencyInput } from "../components/CurrencyInput";
-import { QuickCalculatorButton } from "../components/QuickCalculator";
 import "./CreateInvoiceScreen.css";
 
 export interface InvoiceScreenActions {
@@ -860,7 +859,12 @@ function InvoiceEditor({
       <a className="invoice-skip-link" href="#invoice-workspace">
         Đến nội dung hóa đơn
       </a>
-      <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
+      <WorkspaceSidebar
+        activeScreen={activeScreen}
+        onNavigate={onNavigate}
+        isCalculatorOpen={isCalculatorOpen}
+        onToggleCalculator={onToggleCalculator}
+      />
       <main className="workspace" id="invoice-workspace" tabIndex={-1}>
         <header className="page-header invoice-screen-header">
           <div className="invoice-heading-row">
@@ -895,9 +899,6 @@ function InvoiceEditor({
                       ? "Cần kiểm tra bản nháp"
                       : "Bản nháp đã được lưu"}
             </div>
-            {onToggleCalculator && (
-              <QuickCalculatorButton isOpen={isCalculatorOpen} onToggle={onToggleCalculator} />
-            )}
           </div>
         </header>
         <div className="invoice-feedback" aria-live="polite">

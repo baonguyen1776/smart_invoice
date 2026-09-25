@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { InvoiceIcon } from "./InvoiceIcon";
 import {
   calculatorResultToExpression,
@@ -12,6 +18,19 @@ import {
   type QuickCalculatorHistoryEntry,
 } from "../calculator/QuickCalculatorStorage";
 import "./QuickCalculator.css";
+
+const PANEL_VIEWPORT_GAP = 12;
+
+interface PanelPosition {
+  readonly x: number;
+  readonly y: number;
+}
+
+interface DragState {
+  readonly pointerId: number;
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
 
 export interface QuickCalculatorButtonProps {
   readonly isOpen: boolean;
@@ -27,7 +46,7 @@ export function QuickCalculatorButton({ isOpen, onToggle }: QuickCalculatorButto
       aria-controls="quick-calculator-panel"
       onClick={onToggle}
     >
-      <InvoiceIcon name="calculator" size={16} />
+      <InvoiceIcon name="calculator" size={17} />
       <span>Máy tính</span>
     </button>
   );
@@ -46,8 +65,11 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState("Sao chép kết quả");
-  const [hasJustEvaluated, setHasJustEvaluated] = useState(false);
+  const [hasJustEvaluated, setHasJustEvaluated] = useState(initial.result !== null);
+  const [position, setPosition] = useState<PanelPosition | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragStateRef = useRef<DragState | null>(null);
 
   useEffect(() => {
     saveQuickCalculatorSnapshot({ expression, result, history });
@@ -59,7 +81,7 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
     inputRef.current?.select();
   }, [isOpen]);
 
-  function handleEvaluate() {
+  const handleEvaluate = useCallback(() => {
     try {
       const nextResult = evaluateCalculatorExpression(expression);
       const entry: QuickCalculatorHistoryEntry = {
@@ -83,39 +105,42 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
       setError(caught instanceof Error ? caught.message : "Không thể tính biểu thức này.");
       setHasJustEvaluated(false);
     }
-  }
+  }, [expression]);
 
-  function appendToken(token: string, kind: "number" | "operator" | "postfix" = "number") {
-    setError(null);
-    setCopyMessage("Sao chép kết quả");
-    setExpression((current) => {
-      if (hasJustEvaluated && result !== null) {
-        if (kind === "operator" || kind === "postfix") {
-          return `${calculatorResultToExpression(result)}${token}`;
+  const appendToken = useCallback(
+    (token: string, kind: "number" | "operator" | "postfix" = "number") => {
+      setError(null);
+      setCopyMessage("Sao chép kết quả");
+      setExpression((current) => {
+        if (hasJustEvaluated && result !== null) {
+          if (kind === "operator" || kind === "postfix") {
+            return `${calculatorResultToExpression(result)}${token}`;
+          }
+          return token;
         }
-        return token;
-      }
-      return `${current}${token}`;
-    });
-    setHasJustEvaluated(false);
-  }
+        return `${current}${token}`;
+      });
+      setHasJustEvaluated(false);
+    },
+    [hasJustEvaluated, result],
+  );
 
-  function handleBackspace() {
+  const handleBackspace = useCallback(() => {
     setExpression((current) => current.trimEnd().slice(0, -1));
     setError(null);
     setHasJustEvaluated(false);
-  }
+  }, []);
 
-  function handleClear() {
+  const handleClear = useCallback(() => {
     setExpression("");
     setResult(null);
     setError(null);
     setCopyMessage("Sao chép kết quả");
     setHasJustEvaluated(false);
     inputRef.current?.focus();
-  }
+  }, []);
 
-  function handleToggleSign() {
+  const handleToggleSign = useCallback(() => {
     const source =
       hasJustEvaluated && result !== null
         ? calculatorResultToExpression(result)
@@ -124,7 +149,55 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
     setExpression(`−(${source})`);
     setError(null);
     setHasJustEvaluated(false);
-  }
+  }, [expression, hasJustEvaluated, result]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handleWindowKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const panel = panelRef.current;
+      const activeElement = document.activeElement;
+      const calculatorOwnsKeyboard =
+        !activeElement ||
+        activeElement === document.body ||
+        activeElement === document.documentElement ||
+        Boolean(panel?.contains(activeElement));
+      if (!calculatorOwnsKeyboard) return;
+
+      let handled = true;
+      if (/^\d$/.test(event.key)) appendToken(event.key);
+      else if (event.key === "," || event.key === ".") appendToken(",");
+      else if (event.key === "+") appendToken(" + ", "operator");
+      else if (event.key === "-") appendToken(" − ", "operator");
+      else if (event.key === "*") appendToken(" × ", "operator");
+      else if (event.key === "/") appendToken(" ÷ ", "operator");
+      else if (event.key === "%") appendToken("%", "postfix");
+      else if (event.key === "(" || event.key === ")") appendToken(event.key);
+      else if (event.key === "Enter" || event.key === "=") handleEvaluate();
+      else if (event.key === "Backspace") handleBackspace();
+      else if (event.key === "Escape") onClose();
+      else handled = false;
+
+      if (!handled) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+
+    window.addEventListener("keydown", handleWindowKeyDown, true);
+    return () => window.removeEventListener("keydown", handleWindowKeyDown, true);
+  }, [appendToken, handleBackspace, handleEvaluate, isOpen, onClose]);
+
+  useEffect(() => {
+    if (!position) return;
+    function clampAfterResize() {
+      const panel = panelRef.current;
+      if (!panel) return;
+      setPosition((current) => (current ? clampPosition(current.x, current.y, panel) : current));
+    }
+    window.addEventListener("resize", clampAfterResize);
+    return () => window.removeEventListener("resize", clampAfterResize);
+  }, [position]);
 
   async function handleCopy() {
     if (result === null) return;
@@ -144,30 +217,57 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
     inputRef.current?.focus();
   }
 
-  function handlePanelKeyDown(event: KeyboardEvent<HTMLElement>) {
-    event.stopPropagation();
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-    if (event.key === "Enter" && event.target === inputRef.current) {
-      event.preventDefault();
-      handleEvaluate();
+  function handleDragStart(event: ReactPointerEvent<HTMLElement>) {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const bounds = panel.getBoundingClientRect();
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - bounds.left,
+      offsetY: event.clientY - bounds.top,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
+
+  function handleDragMove(event: ReactPointerEvent<HTMLElement>) {
+    const drag = dragStateRef.current;
+    const panel = panelRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !panel) return;
+    setPosition(clampPosition(event.clientX - drag.offsetX, event.clientY - drag.offsetY, panel));
+  }
+
+  function handleDragEnd(event: ReactPointerEvent<HTMLElement>) {
+    if (dragStateRef.current?.pointerId !== event.pointerId) return;
+    dragStateRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
   }
 
+  const panelStyle = position
+    ? { left: `${position.x}px`, top: `${position.y}px`, right: "auto" }
+    : undefined;
+
   return (
     <section
+      ref={panelRef}
       id="quick-calculator-panel"
       className="quick-calculator-panel"
       aria-label="Máy tính nhanh"
       hidden={!isOpen}
-      onKeyDown={handlePanelKeyDown}
+      style={panelStyle}
     >
-      <header className="quick-calculator-header">
+      <header
+        className="quick-calculator-header"
+        onPointerDown={handleDragStart}
+        onPointerMove={handleDragMove}
+        onPointerUp={handleDragEnd}
+        onPointerCancel={handleDragEnd}
+      >
         <strong>
-          <InvoiceIcon name="calculator" size={17} />
+          <InvoiceIcon name="calculator" size={18} />
           Máy tính nhanh
         </strong>
         <button
@@ -176,35 +276,39 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
           onClick={onClose}
           aria-label="Đóng máy tính"
         >
-          <InvoiceIcon name="close" size={16} />
+          <InvoiceIcon name="close" size={18} />
         </button>
       </header>
 
       <div className="quick-calculator-body">
-        <label className="sr-only" htmlFor="quick-calculator-expression">
-          Biểu thức tính
-        </label>
-        <input
-          id="quick-calculator-expression"
-          ref={inputRef}
-          className="quick-calculator-expression"
-          value={expression}
-          onChange={(event) => {
-            setExpression(event.target.value.slice(0, 200));
-            setError(null);
-            setHasJustEvaluated(false);
-          }}
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="Ví dụ: 250.000 × (1 − 5%)"
-        />
-
-        <div className="quick-calculator-result" aria-live="polite">
-          {result === null ? "0" : formatCalculatorResult(result)}
-          <small>₫</small>
+        <div className={`quick-calculator-display ${hasJustEvaluated ? "is-evaluated" : ""}`}>
+          <label className="sr-only" htmlFor="quick-calculator-expression">
+            Biểu thức tính
+          </label>
+          <input
+            id="quick-calculator-expression"
+            ref={inputRef}
+            className="quick-calculator-expression"
+            value={expression}
+            onChange={(event) => {
+              setExpression(event.target.value.slice(0, 200));
+              setError(null);
+              setHasJustEvaluated(false);
+            }}
+            autoComplete="off"
+            spellCheck={false}
+            inputMode="decimal"
+            placeholder="0"
+          />
+          {hasJustEvaluated && result !== null && (
+            <output className="quick-calculator-result" aria-live="polite">
+              {formatCalculatorResult(result)}
+            </output>
+          )}
         </div>
+
         <div className="quick-calculator-message" role={error ? "alert" : undefined}>
-          {error ?? "Dùng dấu phẩy cho số thập phân, ví dụ 12,5."}
+          {error ?? "Nhập trực tiếp bằng bàn phím hoặc chọn các phím bên dưới."}
         </div>
 
         <div className="quick-calculator-copy-row">
@@ -212,30 +316,27 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
             type="button"
             className="quick-calculator-copy"
             onClick={() => void handleCopy()}
-            disabled={result === null}
+            disabled={result === null || !hasJustEvaluated}
           >
-            <InvoiceIcon name="copy" size={13} />
+            <InvoiceIcon name="copy" size={14} />
             {copyMessage}
           </button>
         </div>
 
-        <div className="quick-calculator-parens" aria-label="Dấu ngoặc">
+        <div className="quick-calculator-functions">
           <button type="button" onClick={() => appendToken("(")}>
             (
           </button>
           <button type="button" onClick={() => appendToken(")")}>
             )
           </button>
-        </div>
-
-        <div className="quick-calculator-keys">
           <button type="button" onClick={handleClear}>
             AC
           </button>
           <button type="button" onClick={handleBackspace} aria-label="Xóa ký tự cuối">
             ⌫
           </button>
-          <button type="button" className="is-operator" onClick={() => appendToken("%", "postfix")}>
+          <button type="button" onClick={() => appendToken("%", "postfix")}>
             %
           </button>
           <button
@@ -245,7 +346,10 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
           >
             ÷
           </button>
-          {["7", "8", "9"].map((value) => (
+        </div>
+
+        <div className="quick-calculator-keys">
+          {(["7", "8", "9"] as const).map((value) => (
             <button type="button" key={value} onClick={() => appendToken(value)}>
               {value}
             </button>
@@ -257,7 +361,7 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
           >
             ×
           </button>
-          {["4", "5", "6"].map((value) => (
+          {(["4", "5", "6"] as const).map((value) => (
             <button type="button" key={value} onClick={() => appendToken(value)}>
               {value}
             </button>
@@ -269,7 +373,7 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
           >
             −
           </button>
-          {["1", "2", "3"].map((value) => (
+          {(["1", "2", "3"] as const).map((value) => (
             <button type="button" key={value} onClick={() => appendToken(value)}>
               {value}
             </button>
@@ -290,7 +394,7 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
           <button type="button" onClick={() => appendToken(",")}>
             ,
           </button>
-          <button type="button" className="is-equals" onClick={handleEvaluate}>
+          <button type="button" className="is-operator is-equals" onClick={handleEvaluate}>
             =
           </button>
         </div>
@@ -337,4 +441,20 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
       </div>
     </section>
   );
+}
+
+function clampPosition(x: number, y: number, panel: HTMLElement): PanelPosition {
+  const bounds = panel.getBoundingClientRect();
+  const width = panel.offsetWidth || bounds.width;
+  const height = panel.offsetHeight || bounds.height;
+  return {
+    x: Math.min(
+      Math.max(PANEL_VIEWPORT_GAP, x),
+      Math.max(PANEL_VIEWPORT_GAP, window.innerWidth - width - PANEL_VIEWPORT_GAP),
+    ),
+    y: Math.min(
+      Math.max(PANEL_VIEWPORT_GAP, y),
+      Math.max(PANEL_VIEWPORT_GAP, window.innerHeight - height - PANEL_VIEWPORT_GAP),
+    ),
+  };
 }

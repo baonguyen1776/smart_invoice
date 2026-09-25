@@ -6,7 +6,6 @@ import type { PrintInvoiceReceipt } from "../../application/use-cases/PrintInvoi
 import { InvoiceIcon } from "../components/InvoiceIcon";
 import { WorkspaceSidebar } from "../components/WorkspaceSidebar";
 import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewModal";
-import { QuickCalculatorButton } from "../components/QuickCalculator";
 import { normalizeCatalogSearchText } from "../../domain/rules/NormalizeCatalogSearchText";
 import "./InvoiceHistoryScreen.css";
 
@@ -301,7 +300,12 @@ export function InvoiceHistoryScreen({
 
   return (
     <div className="history-screen-frame">
-      <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
+      <WorkspaceSidebar
+        activeScreen={activeScreen}
+        onNavigate={onNavigate}
+        isCalculatorOpen={isCalculatorOpen}
+        onToggleCalculator={onToggleCalculator}
+      />
 
       <main className="history-main-content">
         {/* Header Controls */}
@@ -321,9 +325,6 @@ export function InvoiceHistoryScreen({
           </div>
 
           <div className="history-actions">
-            {onToggleCalculator && (
-              <QuickCalculatorButton isOpen={isCalculatorOpen} onToggle={onToggleCalculator} />
-            )}
             <button
               ref={dateFilterBtnRef}
               type="button"
