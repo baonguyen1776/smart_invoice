@@ -62,7 +62,6 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
   const [expression, setExpression] = useState(initial.expression);
   const [result, setResult] = useState<number | null>(initial.result);
   const [history, setHistory] = useState<readonly QuickCalculatorHistoryEntry[]>(initial.history);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState("Sao chép kết quả");
   const [hasJustEvaluated, setHasJustEvaluated] = useState(initial.result !== null);
@@ -280,148 +279,25 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
         </button>
       </header>
 
-      <div className="quick-calculator-body">
-        <div className={`quick-calculator-display ${hasJustEvaluated ? "is-evaluated" : ""}`}>
-          <label className="sr-only" htmlFor="quick-calculator-expression">
-            Biểu thức tính
-          </label>
-          <input
-            id="quick-calculator-expression"
-            ref={inputRef}
-            className="quick-calculator-expression"
-            value={expression}
-            onChange={(event) => {
-              setExpression(event.target.value.slice(0, 200));
-              setError(null);
-              setHasJustEvaluated(false);
-            }}
-            autoComplete="off"
-            spellCheck={false}
-            inputMode="decimal"
-            placeholder="0"
-          />
-          {hasJustEvaluated && result !== null && (
-            <output className="quick-calculator-result" aria-live="polite">
-              {formatCalculatorResult(result)}
-            </output>
-          )}
-        </div>
+      <div className="quick-calculator-layout">
+        <aside className="quick-calculator-history-panel" aria-label="Lịch sử phép tính">
+          <div className="quick-calculator-history-header">
+            <div>
+              <strong>Lịch sử</strong>
+              <span>{history.length}</span>
+            </div>
+            {history.length > 0 && (
+              <button
+                type="button"
+                className="quick-calculator-clear-history"
+                onClick={() => setHistory([])}
+              >
+                Xóa
+              </button>
+            )}
+          </div>
 
-        <div className="quick-calculator-message" role={error ? "alert" : undefined}>
-          {error ?? "Nhập trực tiếp bằng bàn phím hoặc chọn các phím bên dưới."}
-        </div>
-
-        <div className="quick-calculator-copy-row">
-          <button
-            type="button"
-            className="quick-calculator-copy"
-            onClick={() => void handleCopy()}
-            disabled={result === null || !hasJustEvaluated}
-          >
-            <InvoiceIcon name="copy" size={14} />
-            {copyMessage}
-          </button>
-        </div>
-
-        <div className="quick-calculator-functions">
-          <button type="button" onClick={() => appendToken("(")}>
-            (
-          </button>
-          <button type="button" onClick={() => appendToken(")")}>
-            )
-          </button>
-          <button type="button" onClick={handleClear}>
-            AC
-          </button>
-          <button type="button" onClick={handleBackspace} aria-label="Xóa ký tự cuối">
-            ⌫
-          </button>
-          <button type="button" onClick={() => appendToken("%", "postfix")}>
-            %
-          </button>
-          <button
-            type="button"
-            className="is-operator"
-            onClick={() => appendToken(" ÷ ", "operator")}
-          >
-            ÷
-          </button>
-        </div>
-
-        <div className="quick-calculator-keys">
-          {(["7", "8", "9"] as const).map((value) => (
-            <button type="button" key={value} onClick={() => appendToken(value)}>
-              {value}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="is-operator"
-            onClick={() => appendToken(" × ", "operator")}
-          >
-            ×
-          </button>
-          {(["4", "5", "6"] as const).map((value) => (
-            <button type="button" key={value} onClick={() => appendToken(value)}>
-              {value}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="is-operator"
-            onClick={() => appendToken(" − ", "operator")}
-          >
-            −
-          </button>
-          {(["1", "2", "3"] as const).map((value) => (
-            <button type="button" key={value} onClick={() => appendToken(value)}>
-              {value}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="is-operator"
-            onClick={() => appendToken(" + ", "operator")}
-          >
-            +
-          </button>
-          <button type="button" onClick={handleToggleSign}>
-            +/−
-          </button>
-          <button type="button" onClick={() => appendToken("0")}>
-            0
-          </button>
-          <button type="button" onClick={() => appendToken(",")}>
-            ,
-          </button>
-          <button type="button" className="is-operator is-equals" onClick={handleEvaluate}>
-            =
-          </button>
-        </div>
-
-        <div className="quick-calculator-history-header">
-          <button
-            type="button"
-            className="quick-calculator-history-toggle"
-            onClick={() => setIsHistoryOpen((current) => !current)}
-            aria-expanded={isHistoryOpen}
-          >
-            <InvoiceIcon name="chevron-down" size={14} />
-            Lịch sử gần đây ({history.length})
-          </button>
-          {history.length > 0 && (
-            <button
-              type="button"
-              className="quick-calculator-clear-history"
-              onClick={() => setHistory([])}
-            >
-              Xóa lịch sử
-            </button>
-          )}
-        </div>
-
-        {isHistoryOpen && (
-          <div className="quick-calculator-history" aria-label="Lịch sử phép tính">
+          <div className="quick-calculator-history">
             {history.length === 0 ? (
               <p>Chưa có phép tính nào.</p>
             ) : (
@@ -437,7 +313,130 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
               ))
             )}
           </div>
-        )}
+        </aside>
+
+        <div className="quick-calculator-body">
+          <div className={`quick-calculator-display ${hasJustEvaluated ? "is-evaluated" : ""}`}>
+            <label className="sr-only" htmlFor="quick-calculator-expression">
+              Biểu thức tính
+            </label>
+            <input
+              id="quick-calculator-expression"
+              ref={inputRef}
+              className="quick-calculator-expression"
+              value={expression}
+              onChange={(event) => {
+                setExpression(event.target.value.slice(0, 200));
+                setError(null);
+                setHasJustEvaluated(false);
+              }}
+              autoComplete="off"
+              spellCheck={false}
+              inputMode="decimal"
+              placeholder="0"
+            />
+            {hasJustEvaluated && result !== null && (
+              <output className="quick-calculator-result" aria-live="polite">
+                {formatCalculatorResult(result)}
+              </output>
+            )}
+          </div>
+
+          {error && (
+            <div className="quick-calculator-message" role="alert">
+              {error}
+            </div>
+          )}
+
+          <div className="quick-calculator-copy-row">
+            <button
+              type="button"
+              className="quick-calculator-copy"
+              onClick={() => void handleCopy()}
+              disabled={result === null || !hasJustEvaluated}
+              aria-label={copyMessage}
+              title={copyMessage}
+            >
+              <InvoiceIcon name="copy" size={15} />
+            </button>
+          </div>
+
+          <div className="quick-calculator-functions">
+            <button type="button" onClick={() => appendToken("(")}>
+              (
+            </button>
+            <button type="button" onClick={() => appendToken(")")}>
+              )
+            </button>
+            <button type="button" onClick={handleClear}>
+              AC
+            </button>
+            <button type="button" onClick={handleBackspace} aria-label="Xóa ký tự cuối">
+              ⌫
+            </button>
+            <button type="button" onClick={() => appendToken("%", "postfix")}>
+              %
+            </button>
+            <button
+              type="button"
+              className="is-operator"
+              onClick={() => appendToken(" ÷ ", "operator")}
+            >
+              ÷
+            </button>
+          </div>
+
+          <div className="quick-calculator-keys">
+            {(["7", "8", "9"] as const).map((value) => (
+              <button type="button" key={value} onClick={() => appendToken(value)}>
+                {value}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="is-operator"
+              onClick={() => appendToken(" × ", "operator")}
+            >
+              ×
+            </button>
+            {(["4", "5", "6"] as const).map((value) => (
+              <button type="button" key={value} onClick={() => appendToken(value)}>
+                {value}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="is-operator"
+              onClick={() => appendToken(" − ", "operator")}
+            >
+              −
+            </button>
+            {(["1", "2", "3"] as const).map((value) => (
+              <button type="button" key={value} onClick={() => appendToken(value)}>
+                {value}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="is-operator"
+              onClick={() => appendToken(" + ", "operator")}
+            >
+              +
+            </button>
+            <button type="button" onClick={handleToggleSign}>
+              +/−
+            </button>
+            <button type="button" onClick={() => appendToken("0")}>
+              0
+            </button>
+            <button type="button" onClick={() => appendToken(",")}>
+              ,
+            </button>
+            <button type="button" className="is-operator is-equals" onClick={handleEvaluate}>
+              =
+            </button>
+          </div>
+        </div>
       </div>
     </section>
   );

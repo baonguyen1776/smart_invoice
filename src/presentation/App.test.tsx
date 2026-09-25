@@ -131,7 +131,9 @@ describe("App", () => {
     const expression = screen.getByLabelText("Biểu thức tính");
     fireEvent.change(expression, { target: { value: "10 + 5" } });
     fireEvent.keyDown(expression, { key: "Enter" });
-    expect(screen.getByText("15", { exact: false })).toBeVisible();
+    expect(
+      screen.getByText("15", { exact: false, selector: ".quick-calculator-result" }),
+    ).toBeVisible();
 
     fireEvent.click(
       within(screen.getByRole("navigation")).getByRole("button", { name: /Sản phẩm/ }),

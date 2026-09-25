@@ -16,9 +16,14 @@ describe("QuickCalculatorPanel", () => {
     fireEvent.change(input, { target: { value: "250.000 × 95%" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(screen.getByText("237.500", { exact: false })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: /Lịch sử gần đây/ }));
+    expect(
+      screen.getByText("237.500", { exact: false, selector: ".quick-calculator-result" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Lịch sử phép tính")).toBeVisible();
     expect(screen.getByRole("button", { name: /250.000 × 95%/ })).toBeVisible();
+    expect(
+      screen.queryByText("Nhập trực tiếp bằng bàn phím hoặc chọn các phím bên dưới."),
+    ).not.toBeInTheDocument();
 
     const stored = localStorage.getItem(QUICK_CALCULATOR_STORAGE_KEY);
     expect(stored).toContain("250.000 × 95%");
@@ -67,8 +72,11 @@ describe("QuickCalculatorPanel", () => {
 
     render(<QuickCalculatorPanel isOpen onClose={vi.fn()} />);
     expect(screen.getByLabelText("Biểu thức tính")).toHaveValue("1.200.000 ÷ 3");
-    expect(screen.getByText("400.000", { exact: false })).toBeVisible();
-    expect(screen.getByRole("button", { name: /Lịch sử gần đây \(1\)/ })).toBeVisible();
+    expect(
+      screen.getByText("400.000", { exact: false, selector: ".quick-calculator-result" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Lịch sử phép tính")).toHaveTextContent("Lịch sử1");
+    expect(screen.getByRole("button", { name: /1.200.000 ÷ 3/ })).toBeVisible();
   });
 
   it("moves the panel when its header is dragged and clamps it to the viewport", () => {
