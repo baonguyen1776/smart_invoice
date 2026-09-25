@@ -62,6 +62,7 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
   const [expression, setExpression] = useState(initial.expression);
   const [result, setResult] = useState<number | null>(initial.result);
   const [history, setHistory] = useState<readonly QuickCalculatorHistoryEntry[]>(initial.history);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState("Sao chép kết quả");
   const [hasJustEvaluated, setHasJustEvaluated] = useState(initial.result !== null);
@@ -198,6 +199,13 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
     return () => window.removeEventListener("resize", clampAfterResize);
   }, [position]);
 
+  useEffect(() => {
+    if (!isHistoryOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    setPosition((current) => (current ? clampPosition(current.x, current.y, panel) : current));
+  }, [isHistoryOpen]);
+
   async function handleCopy() {
     if (result === null) return;
     try {
@@ -213,6 +221,7 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
     setResult(entry.result);
     setError(null);
     setHasJustEvaluated(true);
+    setIsHistoryOpen(false);
     inputRef.current?.focus();
   }
 
@@ -253,7 +262,7 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
     <section
       ref={panelRef}
       id="quick-calculator-panel"
-      className="quick-calculator-panel"
+      className={`quick-calculator-panel ${isHistoryOpen ? "is-history-open" : ""}`}
       aria-label="Máy tính nhanh"
       hidden={!isOpen}
       style={panelStyle}
@@ -269,51 +278,76 @@ export function QuickCalculatorPanel({ isOpen, onClose }: QuickCalculatorPanelPr
           <InvoiceIcon name="calculator" size={18} />
           Máy tính nhanh
         </strong>
-        <button
-          type="button"
-          className="quick-calculator-close"
-          onClick={onClose}
-          aria-label="Đóng máy tính"
-        >
-          <InvoiceIcon name="close" size={18} />
-        </button>
+        <div className="quick-calculator-header-actions">
+          {history.length > 0 && (
+            <button
+              type="button"
+              className={`quick-calculator-history-toggle ${isHistoryOpen ? "is-open" : ""}`}
+              onClick={() => setIsHistoryOpen((current) => !current)}
+              aria-label={isHistoryOpen ? "Ẩn lịch sử phép tính" : "Hiện lịch sử phép tính"}
+              aria-expanded={isHistoryOpen}
+              aria-controls="quick-calculator-history-panel"
+              title="Lịch sử phép tính"
+            >
+              <InvoiceIcon name="history" size={18} />
+              <span>{history.length}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="quick-calculator-close"
+            onClick={onClose}
+            aria-label="Đóng máy tính"
+          >
+            <InvoiceIcon name="close" size={18} />
+          </button>
+        </div>
       </header>
 
       <div className="quick-calculator-layout">
-        <aside className="quick-calculator-history-panel" aria-label="Lịch sử phép tính">
-          <div className="quick-calculator-history-header">
-            <div>
-              <strong>Lịch sử</strong>
-              <span>{history.length}</span>
-            </div>
-            {history.length > 0 && (
-              <button
-                type="button"
-                className="quick-calculator-clear-history"
-                onClick={() => setHistory([])}
-              >
-                Xóa
-              </button>
-            )}
-          </div>
-
-          <div className="quick-calculator-history">
-            {history.length === 0 ? (
-              <p>Chưa có phép tính nào.</p>
-            ) : (
-              history.map((entry) => (
+        {isHistoryOpen && (
+          <aside
+            id="quick-calculator-history-panel"
+            className="quick-calculator-history-panel"
+            aria-label="Lịch sử phép tính"
+          >
+            <div className="quick-calculator-history-header">
+              <div>
+                <strong>Lịch sử</strong>
+                <span>{history.length}</span>
+              </div>
+              {history.length > 0 && (
                 <button
                   type="button"
-                  key={`${entry.createdAt}-${entry.expression}`}
-                  onClick={() => handleReuse(entry)}
+                  className="quick-calculator-clear-history"
+                  onClick={() => {
+                    setHistory([]);
+                    setIsHistoryOpen(false);
+                  }}
                 >
-                  <span>{entry.expression}</span>
-                  <strong>{formatCalculatorResult(entry.result)}</strong>
+                  Xóa
                 </button>
-              ))
-            )}
-          </div>
-        </aside>
+              )}
+            </div>
+
+            <div className="quick-calculator-history">
+              {history.length === 0 ? (
+                <p>Chưa có phép tính nào.</p>
+              ) : (
+                history.map((entry) => (
+                  <button
+                    type="button"
+                    key={`${entry.createdAt}-${entry.expression}`}
+                    onClick={() => handleReuse(entry)}
+                  >
+                    <span>{entry.expression}</span>
+                    <strong>{formatCalculatorResult(entry.result)}</strong>
+                  </button>
+                ))
+              )}
+            </div>
+          </aside>
+        )}
 
         <div className="quick-calculator-body">
           <div className={`quick-calculator-display ${hasJustEvaluated ? "is-evaluated" : ""}`}>
