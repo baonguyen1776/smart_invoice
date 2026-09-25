@@ -20,6 +20,8 @@ export interface InvoiceHistoryScreenProps {
   readonly activeScreen?: "invoice" | "products" | "history";
   readonly onNavigate?: (screen: "invoice" | "products" | "history") => void;
   readonly onSelectInvoiceForEdit?: (invoice: Invoice) => void;
+  readonly isCalculatorOpen?: boolean;
+  readonly onToggleCalculator?: () => void;
 }
 
 type DateFilterPreset = "all" | "today" | "week" | "month" | "custom";
@@ -29,6 +31,8 @@ export function InvoiceHistoryScreen({
   activeScreen = "history",
   onNavigate,
   onSelectInvoiceForEdit,
+  isCalculatorOpen = false,
+  onToggleCalculator,
 }: InvoiceHistoryScreenProps) {
   const [invoices, setInvoices] = useState<readonly Invoice[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -296,7 +300,12 @@ export function InvoiceHistoryScreen({
 
   return (
     <div className="history-screen-frame">
-      <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
+      <WorkspaceSidebar
+        activeScreen={activeScreen}
+        onNavigate={onNavigate}
+        isCalculatorOpen={isCalculatorOpen}
+        onToggleCalculator={onToggleCalculator}
+      />
 
       <main className="history-main-content">
         {/* Header Controls */}

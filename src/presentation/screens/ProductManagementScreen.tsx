@@ -30,6 +30,8 @@ export interface ProductManagementScreenProps {
   readonly onNavigate?: (screen: "invoice" | "products" | "history") => void;
   readonly activeScreen?: "invoice" | "products" | "history";
   readonly initialCreateQuery?: string;
+  readonly isCalculatorOpen?: boolean;
+  readonly onToggleCalculator?: () => void;
 }
 interface UnitDraft {
   readonly key: string;
@@ -58,6 +60,8 @@ export function ProductManagementScreen({
   onNavigate,
   activeScreen = "products",
   initialCreateQuery,
+  isCalculatorOpen = false,
+  onToggleCalculator,
 }: ProductManagementScreenProps) {
   const [products, setProducts] = useState<readonly Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -306,7 +310,12 @@ export function ProductManagementScreen({
 
   return (
     <div className="app-frame">
-      <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
+      <WorkspaceSidebar
+        activeScreen={activeScreen}
+        onNavigate={onNavigate}
+        isCalculatorOpen={isCalculatorOpen}
+        onToggleCalculator={onToggleCalculator}
+      />
 
       <main className="workspace product-workspace">
         <h1 className="sr-only">Quản lý sản phẩm</h1>

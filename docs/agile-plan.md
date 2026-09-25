@@ -133,6 +133,8 @@ where business logic lives, how DB migrations work, and what agents must not tou
 - [ ] UX-010 Receipt print preview modal upon invoice completion (Issue #37)
 - [ ] UX-011 Dedicated Invoice History screen with search and detail view (Issue #38)
 - [x] UX-012 Add-only grid scrolling, persisted old debt, and measured A5 receipt pagination (Issue #49; browser/PDF verified, one-sided printing selected in the OS dialog)
+- [ ] UX-013 Persistent quick calculator panel across existing app screens (Issue #61)
+- [ ] UX-014 Apple-style calculator keyboard, shared launcher, and draggable panel (Issue #63)
 
 ## Sprint 4 — Printing (2-3 days)
 

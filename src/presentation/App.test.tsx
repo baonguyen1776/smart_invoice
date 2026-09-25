@@ -110,6 +110,54 @@ describe("App", () => {
     expect(invoiceActions.createInvoiceDraft.execute).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the quick calculator open and preserves its expression across screen navigation", async () => {
+    const productActions: ProductManagementActions = {
+      listProducts: { execute: vi.fn(async () => ok([])) },
+      createProduct: { execute: vi.fn() },
+      updateProduct: { execute: vi.fn() },
+      deactivateProduct: { execute: vi.fn() },
+    };
+    const invoiceActions: InvoiceScreenActions = {
+      createInvoiceDraft: { execute: vi.fn(async () => ok(makeDraft())) },
+      applyInvoiceItemChange: { execute: vi.fn() },
+      searchProducts: { execute: vi.fn(() => ok([])) },
+      listInvoices: { execute: vi.fn(async () => ok([])) },
+    };
+
+    render(<App productActions={productActions} invoiceActions={invoiceActions} />);
+    expect(await screen.findByRole("heading", { name: "Tạo hóa đơn mới" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Máy tính" }));
+    const expression = screen.getByLabelText("Biểu thức tính");
+    fireEvent.change(expression, { target: { value: "10 + 5" } });
+    fireEvent.keyDown(expression, { key: "Enter" });
+    expect(
+      screen.getByText("15", { exact: false, selector: ".quick-calculator-result" }),
+    ).toBeVisible();
+
+    fireEvent.click(
+      within(screen.getByRole("navigation")).getByRole("button", { name: /Sản phẩm/ }),
+    );
+    expect(await screen.findByRole("heading", { name: "Quản lý sản phẩm" })).toBeVisible();
+    expect(screen.getByLabelText("Biểu thức tính")).toHaveValue("10 + 5");
+    expect(screen.getByRole("button", { name: "Máy tính" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    fireEvent.click(
+      within(screen.getByRole("navigation")).getByRole("button", { name: /Lịch sử/ }),
+    );
+    expect(
+      await screen.findByPlaceholderText("Tìm kiếm hóa đơn theo mã số, tên khách hàng, SĐT..."),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Biểu thức tính")).toHaveValue("10 + 5");
+    expect(screen.getByRole("button", { name: "Máy tính" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
   it("navigates to History screen via sidebar and displays invoice history", async () => {
     const productActions: ProductManagementActions = {
       listProducts: { execute: vi.fn(async () => ok([])) },

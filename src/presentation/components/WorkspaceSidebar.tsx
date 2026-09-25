@@ -1,12 +1,20 @@
 import { InvoiceIcon } from "./InvoiceIcon";
+import { QuickCalculatorButton } from "./QuickCalculator";
 import "./WorkspaceSidebar.css";
 
 interface WorkspaceSidebarProps {
   readonly activeScreen: "invoice" | "products" | "history";
   readonly onNavigate?: (screen: "invoice" | "products" | "history") => void;
+  readonly isCalculatorOpen?: boolean;
+  readonly onToggleCalculator?: () => void;
 }
 
-export function WorkspaceSidebar({ activeScreen, onNavigate }: WorkspaceSidebarProps) {
+export function WorkspaceSidebar({
+  activeScreen,
+  onNavigate,
+  isCalculatorOpen = false,
+  onToggleCalculator,
+}: WorkspaceSidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand-mark">
@@ -41,6 +49,12 @@ export function WorkspaceSidebar({ activeScreen, onNavigate }: WorkspaceSidebarP
           </button>
         ))}
       </nav>
+      {onToggleCalculator && (
+        <div className="sidebar-tools">
+          <p>CÔNG CỤ</p>
+          <QuickCalculatorButton isOpen={isCalculatorOpen} onToggle={onToggleCalculator} />
+        </div>
+      )}
       <div className="offline-note">
         <InvoiceIcon name="shield" size={18} />
         <div>

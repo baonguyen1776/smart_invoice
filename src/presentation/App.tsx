@@ -7,6 +7,7 @@ import type { InvoiceHistoryActions } from "./screens/InvoiceHistoryScreen";
 import { InvoiceHistoryScreen } from "./screens/InvoiceHistoryScreen";
 import type { ProductManagementActions } from "./screens/ProductManagementScreen";
 import { ProductManagementScreen } from "./screens/ProductManagementScreen";
+import { QuickCalculatorPanel } from "./components/QuickCalculator";
 
 export type AppScreen = "invoice" | "products" | "history";
 
@@ -29,6 +30,7 @@ export function App({
   const [productQueryPrefill, setProductQueryPrefill] = useState<string | undefined>(undefined);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [editingSession, setEditingSession] = useState(0);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
 
   function handleNavigate(screen: AppScreen) {
     setCurrentScreen(screen);
@@ -46,6 +48,10 @@ export function App({
     setEditingInvoice(inv);
     setEditingSession((session) => session + 1);
     setCurrentScreen("invoice");
+  }
+
+  function handleToggleCalculator() {
+    setIsCalculatorOpen((current) => !current);
   }
 
   const effectiveHistoryActions: InvoiceHistoryActions | undefined =
@@ -69,6 +75,8 @@ export function App({
             onNavigate={handleNavigate}
             onNavigateToProducts={handleNavigateToProducts}
             editingInvoice={editingInvoice}
+            isCalculatorOpen={isCalculatorOpen}
+            onToggleCalculator={handleToggleCalculator}
           />
         </div>
       )}
@@ -78,6 +86,8 @@ export function App({
           activeScreen={currentScreen}
           onNavigate={handleNavigate}
           onSelectInvoiceForEdit={handleSelectInvoiceForEdit}
+          isCalculatorOpen={isCalculatorOpen}
+          onToggleCalculator={handleToggleCalculator}
         />
       )}
       {(!invoiceActions || currentScreen === "products") && (
@@ -86,8 +96,11 @@ export function App({
           activeScreen={currentScreen}
           onNavigate={handleNavigate}
           initialCreateQuery={productQueryPrefill}
+          isCalculatorOpen={isCalculatorOpen}
+          onToggleCalculator={handleToggleCalculator}
         />
       )}
+      <QuickCalculatorPanel isOpen={isCalculatorOpen} onClose={() => setIsCalculatorOpen(false)} />
     </>
   );
 }

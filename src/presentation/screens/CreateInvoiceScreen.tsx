@@ -88,6 +88,8 @@ export interface CreateInvoiceScreenProps {
   readonly activeScreen?: "invoice" | "products" | "history";
   readonly onCompleteInvoice?: (invoice: Invoice) => void;
   readonly editingInvoice?: Invoice | null;
+  readonly isCalculatorOpen?: boolean;
+  readonly onToggleCalculator?: () => void;
 }
 
 export function CreateInvoiceScreen(props: CreateInvoiceScreenProps) {
@@ -105,6 +107,8 @@ function InvoiceEditor({
   activeScreen = "invoice",
   onCompleteInvoice,
   editingInvoice,
+  isCalculatorOpen = false,
+  onToggleCalculator,
 }: CreateInvoiceScreenProps) {
   const [invoice, setInvoice] = useState<Invoice | null>(editingInvoice ?? null);
   const [isLoading, setIsLoading] = useState(!editingInvoice);
@@ -855,7 +859,12 @@ function InvoiceEditor({
       <a className="invoice-skip-link" href="#invoice-workspace">
         Đến nội dung hóa đơn
       </a>
-      <WorkspaceSidebar activeScreen={activeScreen} onNavigate={onNavigate} />
+      <WorkspaceSidebar
+        activeScreen={activeScreen}
+        onNavigate={onNavigate}
+        isCalculatorOpen={isCalculatorOpen}
+        onToggleCalculator={onToggleCalculator}
+      />
       <main className="workspace" id="invoice-workspace" tabIndex={-1}>
         <header className="page-header invoice-screen-header">
           <div className="invoice-heading-row">
