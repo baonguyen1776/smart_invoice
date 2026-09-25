@@ -20,6 +20,7 @@ import { InvoiceIcon } from "../components/InvoiceIcon";
 import { InvoiceLineItems } from "../components/InvoiceLineItems";
 import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewModal";
 import { CurrencyInput } from "../components/CurrencyInput";
+import { QuickCalculatorButton } from "../components/QuickCalculator";
 import "./CreateInvoiceScreen.css";
 
 export interface InvoiceScreenActions {
@@ -86,6 +87,8 @@ export interface CreateInvoiceScreenProps {
   readonly activeScreen?: "invoice" | "products" | "history";
   readonly onCompleteInvoice?: (invoice: Invoice) => void;
   readonly editingInvoice?: Invoice | null;
+  readonly isCalculatorOpen?: boolean;
+  readonly onToggleCalculator?: () => void;
 }
 
 export function CreateInvoiceScreen(props: CreateInvoiceScreenProps) {
@@ -103,6 +106,8 @@ function InvoiceEditor({
   activeScreen = "invoice",
   onCompleteInvoice,
   editingInvoice,
+  isCalculatorOpen = false,
+  onToggleCalculator,
 }: CreateInvoiceScreenProps) {
   const [invoice, setInvoice] = useState<Invoice | null>(editingInvoice ?? null);
   const [isLoading, setIsLoading] = useState(!editingInvoice);
@@ -888,6 +893,9 @@ function InvoiceEditor({
                       ? "Cần kiểm tra bản nháp"
                       : "Bản nháp đã được lưu"}
             </div>
+            {onToggleCalculator && (
+              <QuickCalculatorButton isOpen={isCalculatorOpen} onToggle={onToggleCalculator} />
+            )}
           </div>
         </header>
         <div className="invoice-feedback" aria-live="polite">

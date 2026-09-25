@@ -5,6 +5,7 @@ import type { MarkInvoicePrinted } from "../../application/use-cases/MarkInvoice
 import { InvoiceIcon } from "../components/InvoiceIcon";
 import { WorkspaceSidebar } from "../components/WorkspaceSidebar";
 import { InvoiceReceiptPreviewModal } from "../components/InvoiceReceiptPreviewModal";
+import { QuickCalculatorButton } from "../components/QuickCalculator";
 import { normalizeCatalogSearchText } from "../../domain/rules/NormalizeCatalogSearchText";
 import "./InvoiceHistoryScreen.css";
 
@@ -18,6 +19,8 @@ export interface InvoiceHistoryScreenProps {
   readonly activeScreen?: "invoice" | "products" | "history";
   readonly onNavigate?: (screen: "invoice" | "products" | "history") => void;
   readonly onSelectInvoiceForEdit?: (invoice: Invoice) => void;
+  readonly isCalculatorOpen?: boolean;
+  readonly onToggleCalculator?: () => void;
 }
 
 type DateFilterPreset = "all" | "today" | "week" | "month" | "custom";
@@ -27,6 +30,8 @@ export function InvoiceHistoryScreen({
   activeScreen = "history",
   onNavigate,
   onSelectInvoiceForEdit,
+  isCalculatorOpen = false,
+  onToggleCalculator,
 }: InvoiceHistoryScreenProps) {
   const [invoices, setInvoices] = useState<readonly Invoice[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -292,6 +297,9 @@ export function InvoiceHistoryScreen({
           </div>
 
           <div className="history-actions">
+            {onToggleCalculator && (
+              <QuickCalculatorButton isOpen={isCalculatorOpen} onToggle={onToggleCalculator} />
+            )}
             <button
               ref={dateFilterBtnRef}
               type="button"

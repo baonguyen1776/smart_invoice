@@ -2,6 +2,7 @@ import { WorkspaceSidebar } from "../components/WorkspaceSidebar";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { InvoiceIcon } from "../components/InvoiceIcon";
 import { CurrencyInput } from "../components/CurrencyInput";
+import { QuickCalculatorButton } from "../components/QuickCalculator";
 import { formatVndCurrency, stripNonDigits } from "../formatters/CurrencyFormatter";
 import type { ProductCatalogError } from "../../application/errors/ProductCatalogError";
 import type { Result } from "../../application/shared/Result";
@@ -30,6 +31,8 @@ export interface ProductManagementScreenProps {
   readonly onNavigate?: (screen: "invoice" | "products" | "history") => void;
   readonly activeScreen?: "invoice" | "products" | "history";
   readonly initialCreateQuery?: string;
+  readonly isCalculatorOpen?: boolean;
+  readonly onToggleCalculator?: () => void;
 }
 interface UnitDraft {
   readonly key: string;
@@ -58,6 +61,8 @@ export function ProductManagementScreen({
   onNavigate,
   activeScreen = "products",
   initialCreateQuery,
+  isCalculatorOpen = false,
+  onToggleCalculator,
 }: ProductManagementScreenProps) {
   const [products, setProducts] = useState<readonly Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -327,6 +332,9 @@ export function ProductManagementScreen({
           </div>
 
           <div className="history-actions product-header-actions">
+            {onToggleCalculator && (
+              <QuickCalculatorButton isOpen={isCalculatorOpen} onToggle={onToggleCalculator} />
+            )}
             <div className="panel-heading product-count-badge-wrap">
               <h2 id="catalog-title" className="sr-only">
                 Danh sách sản phẩm
