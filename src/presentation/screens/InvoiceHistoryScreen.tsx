@@ -299,7 +299,7 @@ export function InvoiceHistoryScreen({
   }
 
   return (
-    <div className="history-screen-frame">
+    <div className="app-frame history-screen-frame">
       <WorkspaceSidebar
         activeScreen={activeScreen}
         onNavigate={onNavigate}

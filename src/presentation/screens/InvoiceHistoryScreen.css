@@ -1,19 +1,19 @@
 /* Invoice History Screen Styles — Matching Modern Card & Tablet Reference Layout */
 
 .history-screen-frame {
-  display: flex;
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background-color: var(--bg-app, #f8fafc);
+  background-color: var(--page-background);
 }
 
 .history-main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--surface, #ffffff);
-  padding: 2rem 2.25rem 1.5rem 2.25rem;
+  min-width: 0;
+  background: transparent;
+  padding: var(--space-6) var(--space-6) var(--space-5) var(--space-6);
   overflow-y: auto;
   position: relative;
 }
@@ -23,8 +23,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.25rem;
-  margin-bottom: 1.5rem;
+  gap: var(--space-4-5);
+  margin-bottom: var(--space-5);
   position: relative;
 }
 
@@ -37,20 +37,20 @@
 .history-search-input {
   width: 100%;
   height: 48px;
-  background: var(--surface-subtle, #f8fafc);
-  border: 1px solid var(--border-darker, #e2e8f0);
-  border-radius: 9999px;
-  padding: 0 48px 0 22px;
-  font-size: 0.925rem;
-  color: var(--text-main, #1e293b);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-8) 0 var(--space-4-5);
+  font-size: var(--font-size-body);
+  color: var(--ink);
   outline: none;
   transition: all 0.2s ease;
 }
 
 .history-search-input:focus {
-  border-color: var(--accent-orange, #ff7a18);
-  background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(255, 122, 24, 0.12);
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 4px var(--focus-ring);
 }
 
 .history-search-icon {
@@ -58,7 +58,7 @@
   right: 18px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-dim, #94a3b8);
+  color: var(--muted);
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -69,30 +69,30 @@
 .history-actions {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .history-date-filter-btn {
   height: 48px;
-  padding: 0 1.25rem;
-  background: #ffffff;
-  border: 1px solid var(--border-darker, #e2e8f0);
-  border-radius: 9999px;
+  padding: 0 var(--space-4-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-main, #1e293b);
+  gap: var(--space-2-5);
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-strong);
+  color: var(--ink);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 2px 6px var(--shadow-neutral-soft);
   transition: all 0.2s ease;
 }
 
 .history-date-filter-btn:hover,
 .history-date-filter-btn.active {
-  border-color: var(--accent-orange, #ff7a18);
-  color: var(--accent-orange, #ff7a18);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 /* Calendar Popover */
@@ -101,11 +101,11 @@
   top: 60px;
   right: 0;
   width: 320px;
-  background: #ffffff;
-  border-radius: 22px;
-  box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.16);
-  border: 1px solid var(--border, #f1f5f9);
-  padding: 1.35rem;
+  background: var(--surface);
+  border-radius: var(--radius-dialog);
+  box-shadow: 0 20px 40px -10px var(--shadow-neutral);
+  border: 1px solid var(--border);
+  padding: var(--space-4-5);
   z-index: 50;
   animation: historyFadeIn 0.15s ease-out;
 }
@@ -125,43 +125,43 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1.15rem;
+  margin-bottom: var(--space-4-5);
 }
 
 .calendar-month {
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: var(--text-main, #1e293b);
+  font-weight: var(--font-weight-heading);
+  font-size: var(--font-size-body);
+  color: var(--ink);
 }
 
 .cal-nav-btn {
   background: none;
   border: none;
-  color: var(--text-muted, #64748b);
+  color: var(--muted);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 1rem;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-body);
 }
 
 .cal-nav-btn:hover {
-  background: #f1f5f9;
-  color: var(--text-main, #1e293b);
+  background: var(--surface-soft);
+  color: var(--ink);
 }
 
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 5px;
+  gap: var(--space-1);
   text-align: center;
-  font-size: 0.8rem;
+  font-size: var(--font-size-caption);
 }
 
 .cal-day-name {
-  font-weight: 700;
-  color: var(--text-dim, #94a3b8);
-  padding-bottom: 6px;
-  font-size: 0.75rem;
+  font-weight: var(--font-weight-heading);
+  color: var(--muted);
+  padding-bottom: var(--space-1-5);
+  font-size: var(--font-size-small);
 }
 
 .cal-date {
@@ -171,47 +171,47 @@
   justify-content: center;
   border-radius: 50%;
   cursor: pointer;
-  font-weight: 500;
-  color: var(--text-main, #1e293b);
+  font-weight: var(--font-weight-label);
+  color: var(--ink);
   transition: all 0.15s;
 }
 
 .cal-date:hover:not(.empty) {
-  background: #f8fafc;
+  background: var(--surface-soft);
 }
 
 .cal-date.muted {
-  color: #cbd5e1;
+  color: var(--border-strong);
 }
 
 .cal-date.weekend {
-  color: #f97316;
+  color: var(--warning-indicator);
 }
 
 .cal-date.selected {
-  background: var(--accent-orange, #ff7a18) !important;
-  color: #ffffff !important;
-  font-weight: 700;
-  box-shadow: 0 4px 10px rgba(255, 122, 24, 0.35);
+  background: var(--primary) !important;
+  color: var(--on-primary) !important;
+  font-weight: var(--font-weight-heading);
+  box-shadow: 0 4px 10px var(--shadow-tint-strong);
 }
 
 .quick-presets {
   display: flex;
-  gap: 6px;
-  margin-top: 1rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid var(--border, #f1f5f9);
+  gap: var(--space-1-5);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3-5);
+  border-top: 1px solid var(--border);
 }
 
 .preset-chip {
   flex: 1;
-  padding: 6px 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: #f8fafc;
-  border: 1px solid var(--border, #f1f5f9);
-  border-radius: 8px;
-  color: var(--text-muted, #64748b);
+  padding: var(--space-1-5) 0;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-strong);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--muted);
   cursor: pointer;
   text-align: center;
   transition: all 0.15s;
@@ -219,16 +219,18 @@
 
 .preset-chip:hover,
 .preset-chip.active {
-  background: #fff3ea;
-  color: var(--accent-orange, #ff7a18);
-  border-color: #fed7aa;
+  background: var(--accent-soft);
+  color: var(--primary);
+  border-color: var(--accent-border);
 }
 
 /* Invoices Table Container */
 .history-table-container {
   flex: 1;
   overflow-y: auto;
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--border);
+  background: var(--surface);
 }
 
 table.history-table {
@@ -238,67 +240,67 @@ table.history-table {
 }
 
 table.history-table thead th {
-  padding: 1rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--text-main, #1e293b);
-  border-bottom: 1.5px solid var(--border, #f1f5f9);
-  background: #ffffff;
+  padding: var(--space-4) var(--space-4);
+  font-size: var(--font-size-table-header);
+  font-weight: var(--font-weight-strong);
+  color: var(--muted);
+  border-bottom: 1.5px solid var(--border);
+  background: var(--surface-soft);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
 table.history-table tbody tr {
-  border-bottom: 1px solid var(--border, #f1f5f9);
+  border-bottom: 1px solid var(--border);
   transition: all 0.15s ease;
   cursor: pointer;
 }
 
 table.history-table tbody tr:hover {
-  background: #fafafa;
+  background: var(--surface-soft);
 }
 
 table.history-table td {
-  padding: 1.1rem 1rem;
-  font-size: 0.9rem;
-  color: var(--text-main, #1e293b);
+  padding: var(--space-4) var(--space-4);
+  font-size: var(--font-size-control);
+  color: var(--ink);
   vertical-align: middle;
 }
 
 /* Columns */
 .col-invoice-num {
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: var(--font-weight-heading);
+  color: var(--ink);
   letter-spacing: -0.2px;
 }
 
 .col-invoice-date {
-  color: #334155;
-  font-weight: 500;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-label);
 }
 
 .col-invoice-customer {
-  font-weight: 600;
-  color: #1e293b;
+  font-weight: var(--font-weight-strong);
+  color: var(--ink);
 }
 
 .col-invoice-customer .customer-phone-sub {
   display: block;
-  font-size: 0.775rem;
+  font-size: var(--font-size-small);
   font-weight: 400;
-  color: var(--text-muted, #64748b);
-  margin-top: 2px;
+  color: var(--muted);
+  margin-top: var(--space-half);
 }
 
 .col-invoice-amount {
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: var(--font-weight-heading);
+  color: var(--ink);
   white-space: nowrap;
 }
 
 .col-invoice-amount.is-negative {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 /* Status Badges */
@@ -306,35 +308,35 @@ table.history-table td {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 14px;
-  border-radius: 9999px;
-  font-size: 0.785rem;
-  font-weight: 700;
+  padding: var(--space-1) var(--space-3-5);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-heading);
   letter-spacing: 0.1px;
   border: none;
 }
 
 .history-badge-pill.printed {
-  background: #0ea5e9;
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.2);
+  background: var(--success-soft);
+  color: var(--success);
+  border: 1px solid var(--success-border);
 }
 
 .history-badge-pill.unprinted {
-  background: #f59e0b;
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.2);
+  background: var(--warning-soft);
+  color: var(--warning);
+  border: 1px solid var(--warning-border);
 }
 
 .history-action-dots {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   border: none;
   background: transparent;
-  color: var(--text-dim, #94a3b8);
-  font-size: 1.15rem;
-  font-weight: 800;
+  color: var(--muted);
+  font-size: var(--font-size-section);
+  font-weight: var(--font-weight-heading);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -343,8 +345,8 @@ table.history-table td {
 }
 
 .history-action-dots:hover {
-  background: #f1f5f9;
-  color: var(--text-main, #1e293b);
+  background: var(--surface-soft);
+  color: var(--ink);
 }
 
 /* Empty State */
@@ -353,31 +355,31 @@ table.history-table td {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4rem 1rem;
+  padding: 4rem var(--space-4);
   text-align: center;
-  color: var(--text-muted, #64748b);
+  color: var(--muted);
 }
 
 .history-empty-icon {
   width: 54px;
   height: 54px;
-  border-radius: 16px;
-  background: #f1f5f9;
+  border-radius: var(--radius-panel);
+  background: var(--surface-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-dim, #94a3b8);
-  margin-bottom: 1rem;
+  color: var(--muted);
+  margin-bottom: var(--space-4);
 }
 
 .history-empty-state h4 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--text-main, #1e293b);
-  margin-bottom: 0.5rem;
+  font-size: var(--font-size-section);
+  font-weight: var(--font-weight-heading);
+  color: var(--ink);
+  margin-bottom: var(--space-2);
 }
 
 .history-empty-state p {
-  font-size: 0.875rem;
+  font-size: var(--font-size-control);
   max-width: 360px;
 }

@@ -1,10 +1,15 @@
 mod database;
+mod window_state;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .setup(database::initialize)
+        .setup(|app| {
+            database::initialize(app)?;
+            window_state::initialize(app)
+        })
+        .on_window_event(window_state::handle_window_event)
         .invoke_handler(tauri::generate_handler![
             database::create_product,
             database::get_product,
@@ -25,6 +30,7 @@ pub fn run() {
             database::delete_invoice_draft,
             database::mark_invoice_printed,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building Tauri application")
+        .run(window_state::handle_app_event);
 }
