@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import process from "node:process";
 
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path) =>
+  readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const packageJson = JSON.parse(read("package.json"));
 const packageLock = JSON.parse(read("package-lock.json"));
 const config = JSON.parse(read("src-tauri/tauri.conf.json"));

@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - feature/windows-installer
-      - feature/auto-update
   workflow_dispatch:
 
 permissions:

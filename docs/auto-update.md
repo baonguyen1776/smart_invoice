@@ -57,10 +57,12 @@ cấp tự động; không đưa token cá nhân vào app hoặc source code.
 Cũng có thể thêm secret bằng **Settings → Secrets and variables → Actions**.
 Giá trị secret là toàn bộ nội dung khóa bí mật, không phải đường dẫn file.
 
-## Phát hành 0.1.1 lần đầu
+## Phát hành 0.1.2 lần đầu
 
-Phiên bản `0.1.1` là bản đầu tiên có Updater; bản `0.1.0` đã cài cần được nâng
-cấp thủ công một lần bằng bộ cài mới. Bước build/publish Windows thực tế phải
+Phiên bản `0.1.2` là bản Release đầu tiên có Updater; bản `0.1.0` đã cài cần được nâng
+cấp thủ công một lần bằng bộ cài mới. Bản installer `0.1.1` cũng có Updater nhưng
+workflow Release của tag đó thất bại do script chưa xử lý CRLF; giữ nguyên tag
+và dùng `0.1.2` để phát hành bản sửa. Bước build/publish Windows thực tế phải
 thực hiện trên GitHub sau khi cấu hình secret; chưa thể coi là đã kiểm tra
 cập nhật thực tế chỉ từ các test local trên macOS.
 
@@ -70,13 +72,13 @@ cập nhật thực tế chỉ từ các test local trên macOS.
 3. Tại commit cần phát hành, tạo và đẩy tag:
 
    ```bash
-   git tag v0.1.1
-   git push origin v0.1.1
+   git tag v0.1.2
+   git push origin v0.1.2
    ```
 
 4. Mở **Actions → Windows release**, chờ kiểm tra/build thành công.
 5. Mở **Releases**, review bản nháp. Phải có `*-setup.exe`, chữ ký `.sig`
-   và `latest.json` chứa target `windows-x86_64` và version `0.1.1`.
+   và `latest.json` chứa target `windows-x86_64` và version `0.1.2`.
 6. Tải bộ cài từ draft, thử cài đè bản `0.1.0` trên Windows có dữ liệu mẫu.
 7. Chọn **Publish release**, không đánh dấu pre-release. Xác nhận URL
    `https://github.com/baonguyen1776/smart_invoice/releases/latest/download/latest.json`
@@ -86,18 +88,18 @@ Workflow `Windows installer` cũ vẫn lưu `.exe` trong Artifacts, nhưng cũng
 secret ký vì cấu hình đã bật tạo updater artifacts. Workflow `Windows release`
 mới chạy theo tag `v*`, tạo draft và không tự công bố bản cập nhật.
 
-## Những lần sau: ví dụ 0.1.2
+## Những lần sau: ví dụ 0.1.3
 
 1. Thực hiện thay đổi code theo story và thêm migration mới nếu schema đổi;
    không chỉnh migration đã phát hành.
 2. Đồng bộ version trong `package.json`, `package-lock.json`,
    `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`.
-   Có thể dùng `npm version 0.1.2 --no-git-tag-version` để cập nhật hai file npm,
+   Có thể dùng `npm version 0.1.3 --no-git-tag-version` để cập nhật hai file npm,
    sửa version package Rust/config rồi chạy `cargo check` trong `src-tauri`
    để cập nhật Cargo.lock.
-3. Chạy kiểm tra, commit, tạo tag `v0.1.2` rồi đẩy tag.
+3. Chạy kiểm tra, commit, tạo tag `v0.1.3` rồi đẩy tag.
 4. Review và publish draft Release như lần đầu.
-5. Máy Windows đã cài `0.1.1` sẽ nhận thông báo ở lần mở app tiếp theo khi có
+5. Máy Windows đã cài `0.1.2` sẽ nhận thông báo ở lần mở app tiếp theo khi có
    mạng. Người dùng bấm **Cập nhật**, Windows đóng app và chạy bộ cài; nếu app
    chưa tự mở lại sau khi cài thì mở từ Start Menu.
 
@@ -106,7 +108,7 @@ mới chạy theo tag `v*`, tạo draft và không tự công bố bản cập n
 - Sao lưu database thử nghiệm bằng SQLite backup hoặc copy khi app đã đóng
   hoàn toàn (không copy riêng file `.db` khi kết nối WAL vẫn đang ghi).
 - Từ `0.1.0`, tạo sản phẩm/đơn vị, hóa đơn nháp và hóa đơn hoàn tất; ghi lại ID,
-  nội dung và số lượng bản ghi. Cài đè `0.1.1`, kiểm tra dữ liệu vẫn đúng.
+  nội dung và số lượng bản ghi. Cài đè `0.1.2`, kiểm tra dữ liệu vẫn đúng.
 - Từ `0.1.1`, publish `0.1.2` và cập nhật ngay trong app; đối chiếu lại dữ liệu,
   lịch sử hóa đơn và in thử.
 - Thử **Để sau**, bỏ qua khi đang kiểm tra, mất mạng và lỗi tải. App vẫn dùng
@@ -122,6 +124,7 @@ npm run lint
 npm run test
 npm run build
 node scripts/verify-release.mjs
+node --test scripts/verify-release-check.mjs
 ```
 
 Trong `src-tauri`:
@@ -153,8 +156,14 @@ việc cài bộ cập nhật có chữ ký trên máy Windows.
 - Prettier check cho các file frontend/config/docs/workflow thay đổi — passed.
 - Parse YAML cả hai workflow bằng Ruby YAML — passed.
 - `git diff --check` — passed.
-- Chưa chạy build/cài/cập nhật thực tế trên Windows. Chưa tạo tag hoặc publish
-  Release; cần cấu hình signing secret và kiểm tra Windows theo checklist.
+- Windows installer `0.1.1` đã build thành công tại
+  [GitHub Actions run 38900230825](https://github.com/baonguyen1776/smart_invoice/actions/runs/38900230825).
+- Khóa ký đã được lưu vào GitHub Actions Secret sau khi người dùng cho phép.
+  Kiểm tra ký/verify local xác nhận public key trong app chấp nhận file ký đúng
+  và từ chối file bị sửa.
+- Workflow Release `0.1.1` thất bại ở script kiểm tra version vì CRLF của Windows;
+  bản sửa `0.1.2` chuẩn hóa xuống dòng và thêm 3 test Node cho LF/CRLF/version sai.
+- Chưa cài/cập nhật thực tế trên máy Windows có dữ liệu; chưa publish Release.
 
 ## Files thay đổi trong bản triển khai
 
@@ -166,6 +175,7 @@ việc cài bộ cập nhật có chữ ký trên máy Windows.
 - `package.json`
 - `package-lock.json`
 - `scripts/verify-release.mjs`
+- `scripts/verify-release-check.mjs`
 - `src-tauri/Cargo.toml`
 - `src-tauri/Cargo.lock`
 - `src-tauri/capabilities/default.json`

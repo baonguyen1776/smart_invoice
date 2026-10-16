@@ -38,6 +38,9 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
 
+      - name: Test release version checks
+        run: node --test scripts/verify-release-check.mjs
+
       - name: Verify signing key is configured
         shell: pwsh
         env:
