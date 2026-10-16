@@ -163,7 +163,30 @@ việc cài bộ cập nhật có chữ ký trên máy Windows.
   và từ chối file bị sửa.
 - Workflow Release `0.1.1` thất bại ở script kiểm tra version vì CRLF của Windows;
   bản sửa `0.1.2` chuẩn hóa xuống dòng và thêm 3 test Node cho LF/CRLF/version sai.
-- Chưa cài/cập nhật thực tế trên máy Windows có dữ liệu; chưa publish Release.
+- Chưa cài/cập nhật thực tế trên máy Windows có dữ liệu. Trạng thái phát hành
+  cuối cùng của bản sửa được ghi ở phần bàn giao bên dưới.
+
+## Bàn giao bản phát hành 0.1.2
+
+- [Release v0.1.2](https://github.com/baonguyen1776/smart_invoice/releases/tag/v0.1.2)
+  đã Publish công khai sau khi người dùng cho phép; không phải draft/pre-release.
+- [Windows release workflow](https://github.com/baonguyen1776/smart_invoice/actions/runs/38905160582)
+  đã thành công, gồm `npm run typecheck`, `npm run lint`, `npm run test`,
+  `cargo fmt --check`, `cargo clippy --locked`, `cargo test --locked` và
+  `npm run build` qua Tauri beforeBuildCommand.
+- 40 file test frontend passed; 44 test Rust passed, 2 benchmark ignored.
+  `node --test scripts/verify-release-check.mjs` passed cả 3 test LF/CRLF/version sai.
+- Bộ cài `Smart.Invoice_0.1.2_x64-setup.exe`, `.sig` và `latest.json` đã có
+  trên Release. Manifest trỏ đúng asset Windows x64.
+- Chữ ký từ manifest đã được xác minh trên chính bộ cài bằng public key trong
+  app, dùng `minisign-verify`; file bị sửa bị từ chối.
+- Đã tải `latest.json` và bộ cài qua HTTP không dùng token, xác nhận version
+  `0.1.2`, file PE Windows và SHA-256 khớp artifact có chữ ký:
+  `428ce4f936cae9c0bf55c610c0cac90289e3962faf18aded2ae1648573d9cefd`.
+- App cũ `0.1.0` cần chạy bộ cài mới một lần. Các lần sau tăng version,
+  chạy workflow bằng tag rồi review/publish draft để app nhận bản cập nhật.
+- Chưa tự thao tác cài đè/in trên máy Windows có dữ liệu người dùng; cần kiểm
+  tra các thao tác này theo checklist trước khi triển khai rộng.
 
 ## Files thay đổi trong bản triển khai
 
