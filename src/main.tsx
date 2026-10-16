@@ -31,6 +31,10 @@ import { KiotVietXlsxProductSpreadsheetParser } from "./infrastructure/spreadshe
 import { PreviewProductSpreadsheetImport } from "./application/use-cases/PreviewProductSpreadsheetImport";
 import { ApplyProductSpreadsheetImport } from "./application/use-cases/ApplyProductSpreadsheetImport";
 import { SQLiteProductImportRepository } from "./infrastructure/repositories/SQLiteProductImportRepository";
+import { CheckForAppUpdate } from "./application/use-cases/CheckForAppUpdate";
+import { InstallAppUpdate } from "./application/use-cases/InstallAppUpdate";
+import { TauriAppUpdateService } from "./infrastructure/updates/TauriAppUpdateService";
+import { AppUpdateStartup } from "./presentation/components/AppUpdateStartup";
 
 const rootElement = document.getElementById("root");
 
@@ -48,6 +52,9 @@ const productImportRepository = new SQLiteProductImportRepository();
 const productSpreadsheetParser = new KiotVietXlsxProductSpreadsheetParser();
 
 const searchLoader = new LoadProductSearchIndex(repository, aliasRepository, searchIndex);
+const updater = new TauriAppUpdateService();
+const checkForAppUpdate = new CheckForAppUpdate(updater);
+const installAppUpdate = new InstallAppUpdate(updater);
 
 const productActions = {
   createProduct: new CreateProduct(repository, idGenerator, clock, searchIndex),
@@ -92,8 +99,10 @@ const invoiceActions = {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <ProductSearchStartup loader={searchLoader}>
-      <App productActions={productActions} invoiceActions={invoiceActions} />
-    </ProductSearchStartup>
+    <AppUpdateStartup checker={checkForAppUpdate} installer={installAppUpdate}>
+      <ProductSearchStartup loader={searchLoader}>
+        <App productActions={productActions} invoiceActions={invoiceActions} />
+      </ProductSearchStartup>
+    </AppUpdateStartup>
   </StrictMode>,
 );

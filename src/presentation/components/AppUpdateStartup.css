@@ -1,0 +1,48 @@
+.app-update-startup {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: var(--space-6);
+  background: var(--page-background);
+}
+
+.app-update-card {
+  width: min(100%, 560px);
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.app-update-brand {
+  color: var(--primary);
+  font-weight: var(--font-weight-strong);
+}
+
+.app-update-card h1 {
+  font-size: var(--font-size-title);
+}
+
+.app-update-card p {
+  line-height: 1.6;
+}
+
+.app-update-notes {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.app-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.app-update-card progress {
+  width: 100%;
+  accent-color: var(--primary);
+}

@@ -45,3 +45,9 @@ accessibility targets are maintained in
 Targets marked `Proposed` are not binding until human approval.
 
 Issue test results, benchmarks, and rerun commands: [verification notes](docs/testing/issues.md).
+
+## Windows updates
+
+Windows release builds check for signed updates from GitHub Releases before
+opening the invoice editor. See the [update and release guide](docs/auto-update.md)
+for signing-key setup, publishing, and upgrade verification with existing data.
